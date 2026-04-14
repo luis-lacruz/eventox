@@ -8,7 +8,7 @@ Users forecast outcomes on politics, economics, and public policy using play-mon
 
 ## Demo
 
-<img src="docs/screenshots/markets-v2.png" alt="EventoX Markets View" width="100%">
+<img src="docs/screenshots/markets-v3.png" alt="EventoX Markets View" width="100%">
 
 ---
 
