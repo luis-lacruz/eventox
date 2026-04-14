@@ -438,7 +438,7 @@ app.post("/bets", authenticateToken, async (req, res) => {
 app.get("/bets/mine", authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT b.*, e.title AS event_title, e.status AS event_status
+      `SELECT b.*, e.title AS event_title, e.status AS event_status, e.resolved_as
        FROM bets b
        JOIN events e ON b.event_id = e.id
        WHERE b.user_id = $1

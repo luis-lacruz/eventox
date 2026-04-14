@@ -1089,7 +1089,7 @@
         // Load data for the page
         if (page === 'positions' && currentUser) loadPositions();
         if (page === 'leaderboard') loadLeaderboard();
-        if (page === 'admin') loadAdminMarkets();
+        
     }
 
     // ─── Markets ─────────────────────────────────────────────
@@ -1308,30 +1308,86 @@
                 return;
             }
 
+            // Calculate performance stats
+            let wins = 0, losses = 0, pending = 0, totalWagered = 0, totalPayout = 0;
+            positions.forEach(p => {
+                totalWagered += p.amount;
+                if (p.event_status === 'resolved') {
+                    if (p.position === p.resolved_as) {
+                        wins++;
+                        totalPayout += p.amount * 2;
+                    } else {
+                        losses++;
+                    }
+                } else {
+                    pending++;
+                }
+            });
+            const profit = totalPayout - (wins + losses > 0 ? positions.filter(p => p.event_status === 'resolved').reduce((sum, p) => sum + p.amount, 0) : 0);
+
+            const statsHtml = `
+                <div style="display: flex; gap: 2rem; margin-bottom: 2rem; flex-wrap: wrap;">
+                    <div class="stat">
+                        <span class="stat-value">${positions.length}</span>
+                        <span class="stat-label">Total</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" style="color: var(--yes);">${wins}</span>
+                        <span class="stat-label">Ganadas</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" style="color: var(--no);">${losses}</span>
+                        <span class="stat-label">Perdidas</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" style="color: var(--muted);">${pending}</span>
+                        <span class="stat-label">Pendientes</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" style="color: ${profit >= 0 ? 'var(--yes)' : 'var(--no)'};">${profit >= 0 ? '+' : ''}${profit}</span>
+                        <span class="stat-label">Beneficio</span>
+                    </div>
+                </div>`;
+
             const rows = positions.map(p => {
                 const date = new Date(p.created_at).toLocaleDateString('es-CO', {
                     day: 'numeric', month: 'short'
                 });
                 const posClass = p.position === 'yes' ? 'pos-yes' : 'pos-no';
-                const statusClass = p.event_status === 'open' ? 'pos-status-open' : 'pos-status-resolved';
+
+                let resultText, resultStyle;
+                if (p.event_status === 'resolved') {
+                    if (p.position === p.resolved_as) {
+                        resultText = `GANÓ +${p.amount}`;
+                        resultStyle = 'color: var(--yes); font-weight: 600;';
+                    } else {
+                        resultText = `PERDIÓ -${p.amount}`;
+                        resultStyle = 'color: var(--no); font-weight: 600;';
+                    }
+                } else {
+                    resultText = 'PENDIENTE';
+                    resultStyle = 'color: var(--muted);';
+                }
+
                 return `
                     <tr>
                         <td>${p.event_title}</td>
                         <td class="${posClass}">${p.position.toUpperCase()}</td>
                         <td>${p.amount}</td>
-                        <td class="${statusClass}">${p.event_status === 'open' ? 'Activo' : 'Resuelto'}</td>
+                        <td style="${resultStyle}">${resultText}</td>
                         <td>${date}</td>
                     </tr>`;
             }).join('');
 
             container.innerHTML = `
+                ${statsHtml}
                 <table class="positions-table">
                     <thead>
                         <tr>
                             <th>Mercado</th>
                             <th>Posición</th>
-                            <th>Créditos</th>
-                            <th>Estado</th>
+                            <th>Apuesta</th>
+                            <th>Resultado</th>
                             <th>Fecha</th>
                         </tr>
                     </thead>
@@ -1345,7 +1401,7 @@
                 </div>`;
         }
     }
-
+    
     // ─── Leaderboard ─────────────────────────────────────────
 
     async function loadLeaderboard() {
