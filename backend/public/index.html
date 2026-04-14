@@ -3,25 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EventoX — Mercado de Predicciones</title>
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <title>EventoX — Mercados de Predicción</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0a0a0f;
-            --bg2: #111118;
-            --bg3: #1a1a24;
-            --border: #2a2a38;
-            --accent: #e8ff47;
-            --accent2: #ff4747;
-            --accent3: #47b4ff;
-            --text: #f0f0f5;
+            --bg: #0a0a0c;
+            --bg2: #111114;
+            --bg3: #1a1a1f;
+            --text: #e8e8e8;
             --muted: #6b6b85;
-            --yes: #47ff8a;
-            --no: #ff4747;
+            --accent: #e8ff47;
+            --border: #1f1f2a;
+            --yes: #00d672;
+            --no: #ff4757;
         }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background: var(--bg);
             color: var(--text);
@@ -29,51 +25,32 @@
             min-height: 100vh;
             overflow-x: hidden;
         }
-
-        /* NOISE TEXTURE OVERLAY */
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-            pointer-events: none;
-            z-index: 0;
-            opacity: 0.4;
-        }
-
         /* HEADER */
         header {
-            border-bottom: 1px solid var(--border);
-            padding: 0 2rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            height: 60px;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
             position: sticky;
             top: 0;
-            background: rgba(10,10,15,0.95);
-            backdrop-filter: blur(12px);
             z-index: 100;
         }
-
         .logo {
             font-family: 'Syne', sans-serif;
             font-weight: 800;
             font-size: 1.4rem;
             letter-spacing: -0.02em;
             color: var(--accent);
+            cursor: pointer;
         }
-
-        .logo span {
-            color: var(--text);
-        }
-
+        .logo span { color: var(--text); }
         .header-right {
             display: flex;
             align-items: center;
-            gap: 1.5rem;
+            gap: 1rem;
         }
-
         .credits-display {
             font-family: 'IBM Plex Mono', monospace;
             font-size: 0.85rem;
@@ -82,12 +59,18 @@
             align-items: center;
             gap: 0.5rem;
         }
-
         .credits-amount {
             color: var(--accent);
             font-weight: 500;
         }
-
+        .user-display {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text);
+            padding: 0.4rem 0.8rem;
+            border: 1px solid var(--border);
+            background: var(--bg2);
+        }
         .btn {
             font-family: 'IBM Plex Mono', monospace;
             font-size: 0.78rem;
@@ -101,24 +84,56 @@
             transition: all 0.15s;
             text-transform: uppercase;
         }
-
         .btn:hover {
             border-color: var(--accent);
             color: var(--accent);
         }
-
         .btn-primary {
             background: var(--accent);
             color: var(--bg);
             border-color: var(--accent);
         }
-
         .btn-primary:hover {
             background: var(--text);
             border-color: var(--text);
             color: var(--bg);
         }
-
+        .btn-small {
+            font-size: 0.7rem;
+            padding: 0.35rem 0.7rem;
+        }
+        .btn-ghost {
+            border: none;
+            color: var(--muted);
+            padding: 0.35rem 0.5rem;
+        }
+        .btn-ghost:hover { color: var(--accent); border: none; }
+        /* NAV TABS */
+        .nav-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+        }
+        .nav-tab {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 0.8rem 1.5rem;
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            transition: all 0.15s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+        }
+        .nav-tab:hover { color: var(--text); }
+        .nav-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
         /* TICKER */
         .ticker {
             background: var(--bg2);
@@ -127,13 +142,11 @@
             overflow: hidden;
             white-space: nowrap;
         }
-
         .ticker-inner {
             display: inline-flex;
             gap: 3rem;
             animation: ticker 30s linear infinite;
         }
-
         .ticker-item {
             font-family: 'IBM Plex Mono', monospace;
             font-size: 0.75rem;
@@ -142,16 +155,13 @@
             align-items: center;
             gap: 0.75rem;
         }
-
         .ticker-item .label { color: var(--text); }
         .ticker-item .yes-val { color: var(--yes); }
         .ticker-item .no-val { color: var(--no); }
-
         @keyframes ticker {
             0% { transform: translateX(0); }
             100% { transform: translateX(-50%); }
         }
-
         /* MAIN LAYOUT */
         main {
             max-width: 1200px;
@@ -160,7 +170,9 @@
             position: relative;
             z-index: 1;
         }
-
+        /* PAGE SECTIONS */
+        .page-section { display: none; }
+        .page-section.active { display: block; }
         /* HERO */
         .hero {
             margin-bottom: 3rem;
@@ -171,7 +183,6 @@
             align-items: end;
             gap: 2rem;
         }
-
         .hero h1 {
             font-family: 'Syne', sans-serif;
             font-weight: 800;
@@ -179,12 +190,10 @@
             line-height: 1;
             letter-spacing: -0.03em;
         }
-
         .hero h1 .highlight {
             color: var(--accent);
             display: block;
         }
-
         .hero p {
             margin-top: 1rem;
             color: var(--muted);
@@ -192,33 +201,28 @@
             max-width: 500px;
             line-height: 1.6;
         }
-
         .stats-row {
             display: flex;
             gap: 2rem;
             text-align: right;
         }
-
         .stat {
             display: flex;
             flex-direction: column;
             gap: 0.25rem;
         }
-
         .stat-value {
             font-family: 'IBM Plex Mono', monospace;
             font-size: 1.5rem;
             font-weight: 500;
             color: var(--accent);
         }
-
         .stat-label {
             font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 0.1em;
             color: var(--muted);
         }
-
         /* SECTION */
         .section-header {
             display: flex;
@@ -226,7 +230,6 @@
             justify-content: space-between;
             margin-bottom: 1.5rem;
         }
-
         .section-title {
             font-family: 'Syne', sans-serif;
             font-weight: 700;
@@ -238,7 +241,6 @@
             align-items: center;
             gap: 0.75rem;
         }
-
         .section-title::before {
             content: '';
             display: inline-block;
@@ -246,7 +248,6 @@
             height: 6px;
             background: var(--accent);
         }
-
         /* MARKETS GRID */
         .markets-grid {
             display: grid;
@@ -256,7 +257,6 @@
             border: 1px solid var(--border);
             margin-bottom: 3rem;
         }
-
         .market-card {
             background: var(--bg);
             padding: 1.5rem;
@@ -265,28 +265,18 @@
             position: relative;
             overflow: hidden;
         }
-
         .market-card::after {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
+            top: 0; left: 0; right: 0;
             height: 2px;
             background: var(--accent);
             transform: scaleX(0);
             transform-origin: left;
             transition: transform 0.2s;
         }
-
-        .market-card:hover {
-            background: var(--bg2);
-        }
-
-        .market-card:hover::after {
-            transform: scaleX(1);
-        }
-
+        .market-card:hover { background: var(--bg2); }
+        .market-card:hover::after { transform: scaleX(1); }
         .market-tag {
             font-family: 'IBM Plex Mono', monospace;
             font-size: 0.65rem;
@@ -298,7 +288,6 @@
             display: inline-block;
             margin-bottom: 0.75rem;
         }
-
         .market-title {
             font-family: 'Syne', sans-serif;
             font-size: 1rem;
@@ -307,35 +296,27 @@
             margin-bottom: 1.25rem;
             color: var(--text);
         }
-
         /* PRICE BAR */
-        .price-bar-container {
-            margin-bottom: 1rem;
-        }
-
+        .price-bar-container { margin-bottom: 1rem; }
         .price-bar {
             height: 4px;
             background: var(--bg3);
             margin-bottom: 0.5rem;
             position: relative;
         }
-
         .price-bar-fill {
             height: 100%;
             background: var(--yes);
             transition: width 0.5s ease;
         }
-
         .price-labels {
             display: flex;
             justify-content: space-between;
             font-family: 'IBM Plex Mono', monospace;
             font-size: 0.75rem;
         }
-
         .yes-label { color: var(--yes); }
         .no-label { color: var(--no); }
-
         /* MARKET FOOTER */
         .market-footer {
             display: flex;
@@ -345,7 +326,6 @@
             padding-top: 1.25rem;
             border-top: 1px solid var(--border);
         }
-
         .market-meta {
             font-family: 'IBM Plex Mono', monospace;
             font-size: 0.7rem;
@@ -354,50 +334,88 @@
             flex-direction: column;
             gap: 0.2rem;
         }
-
-        .bet-buttons {
+        .bet-buttons { display: flex; gap: 0.5rem; }
+        .btn-yes, .btn-no {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            padding: 0.4rem 0.8rem;
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .btn-yes { border: 1px solid var(--yes); color: var(--yes); }
+        .btn-yes:hover { background: var(--yes); color: var(--bg); }
+        .btn-no { border: 1px solid var(--no); color: var(--no); }
+        .btn-no:hover { background: var(--no); color: var(--bg); }
+        /* POSITIONS TABLE */
+        .positions-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }
+        .positions-table th {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            text-align: left;
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg2);
+        }
+        .positions-table td {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+        }
+        .positions-table tr:hover td { background: var(--bg2); }
+        .pos-yes { color: var(--yes); font-weight: 500; }
+        .pos-no { color: var(--no); font-weight: 500; }
+        .pos-status-open { color: var(--accent); }
+        .pos-status-resolved { color: var(--muted); }
+        /* LEADERBOARD */
+        .leaderboard-list {
+            border: 1px solid var(--border);
+        }
+        .leaderboard-item {
             display: flex;
-            gap: 0.5rem;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.8rem 1.2rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+            transition: background 0.15s;
         }
-
-        .btn-yes {
+        .leaderboard-item:last-child { border-bottom: none; }
+        .leaderboard-item:hover { background: var(--bg2); }
+        .lb-rank {
             font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.7rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--muted);
+            width: 2.5rem;
+        }
+        .lb-rank.top-3 { color: var(--accent); }
+        .lb-username {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text);
+            flex: 1;
+        }
+        .lb-username.is-you { color: var(--accent); }
+        .lb-credits {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.85rem;
             font-weight: 500;
-            padding: 0.4rem 0.8rem;
-            border: 1px solid var(--yes);
-            background: transparent;
             color: var(--yes);
-            cursor: pointer;
-            transition: all 0.15s;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
         }
-
-        .btn-yes:hover {
-            background: var(--yes);
-            color: var(--bg);
-        }
-
-        .btn-no {
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.7rem;
-            font-weight: 500;
-            padding: 0.4rem 0.8rem;
-            border: 1px solid var(--no);
-            background: transparent;
-            color: var(--no);
-            cursor: pointer;
-            transition: all 0.15s;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .btn-no:hover {
-            background: var(--no);
-            color: var(--bg);
-        }
-
         /* EMPTY STATE */
         .empty-state {
             padding: 4rem 2rem;
@@ -405,19 +423,17 @@
             background: var(--bg);
             border: 1px solid var(--border);
         }
-
         .empty-state h3 {
             font-family: 'Syne', sans-serif;
             font-size: 1.2rem;
             margin-bottom: 0.5rem;
             color: var(--muted);
         }
-
         .empty-state p {
             font-size: 0.85rem;
             color: var(--muted);
+            margin-bottom: 1rem;
         }
-
         /* MODAL */
         .modal-overlay {
             display: none;
@@ -429,11 +445,7 @@
             justify-content: center;
             backdrop-filter: blur(4px);
         }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
+        .modal-overlay.active { display: flex; }
         .modal {
             background: var(--bg2);
             border: 1px solid var(--border);
@@ -442,12 +454,10 @@
             padding: 2rem;
             animation: slideUp 0.2s ease;
         }
-
         @keyframes slideUp {
             from { transform: translateY(20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
-
         .modal-title {
             font-family: 'Syne', sans-serif;
             font-weight: 700;
@@ -457,7 +467,6 @@
             align-items: center;
             justify-content: space-between;
         }
-
         .modal-close {
             background: none;
             border: none;
@@ -466,13 +475,8 @@
             font-size: 1.2rem;
             font-family: 'IBM Plex Mono', monospace;
         }
-
         .modal-close:hover { color: var(--text); }
-
-        .form-group {
-            margin-bottom: 1.25rem;
-        }
-
+        .form-group { margin-bottom: 1.25rem; }
         .form-label {
             display: block;
             font-family: 'IBM Plex Mono', monospace;
@@ -482,7 +486,6 @@
             color: var(--muted);
             margin-bottom: 0.5rem;
         }
-
         .form-input {
             width: 100%;
             background: var(--bg3);
@@ -494,18 +497,34 @@
             outline: none;
             transition: border-color 0.15s;
         }
-
-        .form-input:focus {
-            border-color: var(--accent);
+        .form-input:focus { border-color: var(--accent); }
+        .form-error {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--no);
+            margin-top: 0.5rem;
+            display: none;
         }
-
+        .form-error.show { display: block; }
         .modal-actions {
             display: flex;
             gap: 0.75rem;
             margin-top: 1.5rem;
             justify-content: flex-end;
         }
-
+        .auth-toggle {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-top: 1rem;
+            text-align: center;
+        }
+        .auth-toggle a {
+            color: var(--accent);
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .auth-toggle a:hover { text-decoration: underline; }
         /* BET MODAL */
         .bet-modal-market {
             background: var(--bg3);
@@ -515,14 +534,12 @@
             font-size: 0.9rem;
             line-height: 1.4;
         }
-
         .bet-position-select {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 0.75rem;
             margin-bottom: 1.25rem;
         }
-
         .position-btn {
             padding: 1rem;
             border: 2px solid var(--border);
@@ -537,38 +554,14 @@
             gap: 0.25rem;
             text-align: left;
         }
-
-        .position-btn .pos-label {
-            font-size: 1.2rem;
-            font-weight: 700;
-        }
-
-        .position-btn .pos-price {
-            font-size: 0.75rem;
-        }
-
-        .position-btn.yes-btn {
-            color: var(--yes);
-            border-color: var(--yes);
-        }
-
+        .position-btn .pos-label { font-size: 1.2rem; font-weight: 700; }
+        .position-btn .pos-price { font-size: 0.75rem; }
+        .position-btn.yes-btn { color: var(--yes); border-color: var(--yes); }
         .position-btn.yes-btn.selected,
-        .position-btn.yes-btn:hover {
-            background: var(--yes);
-            color: var(--bg);
-        }
-
-        .position-btn.no-btn {
-            color: var(--no);
-            border-color: var(--no);
-        }
-
+        .position-btn.yes-btn:hover { background: var(--yes); color: var(--bg); }
+        .position-btn.no-btn { color: var(--no); border-color: var(--no); }
         .position-btn.no-btn.selected,
-        .position-btn.no-btn:hover {
-            background: var(--no);
-            color: var(--bg);
-        }
-
+        .position-btn.no-btn:hover { background: var(--no); color: var(--bg); }
         /* TOAST */
         .toast {
             position: fixed;
@@ -585,15 +578,8 @@
             transition: transform 0.3s ease;
             max-width: 300px;
         }
-
-        .toast.show {
-            transform: translateX(0);
-        }
-
-        .toast.error {
-            border-left-color: var(--no);
-        }
-
+        .toast.show { transform: translateX(0); }
+        .toast.error { border-left-color: var(--no); }
         /* LOADING */
         .loading {
             display: flex;
@@ -602,41 +588,24 @@
             justify-content: center;
             padding: 3rem;
         }
-
         .loading-dot {
-            width: 6px;
-            height: 6px;
+            width: 6px; height: 6px;
             background: var(--accent);
             animation: pulse 1s ease-in-out infinite;
         }
-
         .loading-dot:nth-child(2) { animation-delay: 0.2s; }
         .loading-dot:nth-child(3) { animation-delay: 0.4s; }
-
         @keyframes pulse {
             0%, 100% { opacity: 0.2; transform: scale(0.8); }
             50% { opacity: 1; transform: scale(1); }
         }
-
-        /* RESOLVED BADGE */
-        .resolved-badge {
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.65rem;
-            padding: 0.15rem 0.4rem;
-            background: rgba(107,107,133,0.2);
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        /* CATEGORY FILTER */
+        /* FILTER */
         .filter-row {
             display: flex;
             gap: 0.5rem;
             margin-bottom: 1.5rem;
             flex-wrap: wrap;
         }
-
         .filter-btn {
             font-family: 'IBM Plex Mono', monospace;
             font-size: 0.7rem;
@@ -649,16 +618,16 @@
             cursor: pointer;
             transition: all 0.15s;
         }
-
         .filter-btn:hover, .filter-btn.active {
             border-color: var(--accent);
             color: var(--accent);
         }
-
         @media (max-width: 600px) {
             .hero { grid-template-columns: 1fr; }
             .stats-row { text-align: left; }
             main { padding: 1rem; }
+            .header-right { gap: 0.5rem; }
+            .nav-tab { padding: 0.7rem 1rem; font-size: 0.7rem; }
         }
     </style>
 </head>
@@ -666,14 +635,18 @@
 
 <!-- HEADER -->
 <header>
-    <div class="logo">Evento<span>X</span></div>
-    <div class="header-right">
-        <div class="credits-display">
-            CRÉDITOS: <span class="credits-amount" id="userCredits">1,000</span>
-        </div>
-        <button class="btn btn-primary" onclick="openNewMarketModal()">+ NUEVO MERCADO</button>
+    <div class="logo" onclick="showPage('markets')">Evento<span>X</span></div>
+    <div class="header-right" id="headerRight">
+        <!-- Populated by JS based on auth state -->
     </div>
 </header>
+
+<!-- NAV TABS (shown when logged in) -->
+<div class="nav-tabs" id="navTabs" style="display: none;">
+    <button class="nav-tab active" onclick="showPage('markets', this)">Mercados</button>
+    <button class="nav-tab" onclick="showPage('positions', this)">Mis Posiciones</button>
+    <button class="nav-tab" onclick="showPage('leaderboard', this)">Ranking</button>
+</div>
 
 <!-- TICKER -->
 <div class="ticker">
@@ -685,42 +658,127 @@
 
 <!-- MAIN -->
 <main>
-    <div class="hero">
-        <div>
-            <h1>Predice el futuro<span class="highlight">de Colombia.</span></h1>
-            <p>Mercados de predicción binarios sobre política, economía y eventos colombianos. Resueltos con datos oficiales del gobierno.</p>
-        </div>
-        <div class="stats-row">
-            <div class="stat">
-                <span class="stat-value" id="totalMarkets">0</span>
-                <span class="stat-label">Mercados</span>
+    <!-- MARKETS PAGE -->
+    <div class="page-section active" id="page-markets">
+        <div class="hero">
+            <div>
+                <h1>Predice el futuro<span class="highlight">de Colombia.</span></h1>
+                <p>Mercados de predicción binarios sobre política, economía y eventos colombianos. Resueltos con datos oficiales del gobierno.</p>
             </div>
-            <div class="stat">
-                <span class="stat-value" id="totalBets">0</span>
-                <span class="stat-label">Posiciones</span>
+            <div class="stats-row">
+                <div class="stat">
+                    <span class="stat-value" id="totalMarkets">0</span>
+                    <span class="stat-label">Mercados</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" id="totalBets">0</span>
+                    <span class="stat-label">Posiciones</span>
+                </div>
+            </div>
+        </div>
+        <div class="section-header">
+            <div class="section-title">Mercados Activos</div>
+            <button class="btn btn-primary btn-small" id="newMarketBtn" style="display:none;" onclick="openNewMarketModal()">+ NUEVO MERCADO</button>
+        </div>
+        <div class="filter-row">
+            <button class="filter-btn active" onclick="filterMarkets('all', this)">Todos</button>
+            <button class="filter-btn" onclick="filterMarkets('política', this)">Política</button>
+            <button class="filter-btn" onclick="filterMarkets('economía', this)">Economía</button>
+            <button class="filter-btn" onclick="filterMarkets('crimen', this)">Seguridad</button>
+        </div>
+        <div id="marketsContainer">
+            <div class="loading">
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
             </div>
         </div>
     </div>
 
-    <div class="section-header">
-        <div class="section-title">Mercados Activos</div>
+    <!-- MY POSITIONS PAGE -->
+    <div class="page-section" id="page-positions">
+        <div style="padding: 2rem 0;">
+            <div class="section-header">
+                <div class="section-title">Mis Posiciones</div>
+            </div>
+            <div id="positionsContainer">
+                <div class="loading">
+                    <div class="loading-dot"></div>
+                    <div class="loading-dot"></div>
+                    <div class="loading-dot"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div class="filter-row">
-        <button class="filter-btn active" onclick="filterMarkets('all', this)">Todos</button>
-        <button class="filter-btn" onclick="filterMarkets('política', this)">Política</button>
-        <button class="filter-btn" onclick="filterMarkets('economía', this)">Economía</button>
-        <button class="filter-btn" onclick="filterMarkets('crimen', this)">Seguridad</button>
-    </div>
-
-    <div id="marketsContainer">
-        <div class="loading">
-            <div class="loading-dot"></div>
-            <div class="loading-dot"></div>
-            <div class="loading-dot"></div>
+    <!-- LEADERBOARD PAGE -->
+    <div class="page-section" id="page-leaderboard">
+        <div style="padding: 2rem 0;">
+            <div class="section-header">
+                <div class="section-title">Ranking de Predictores</div>
+            </div>
+            <div id="leaderboardContainer">
+                <div class="loading">
+                    <div class="loading-dot"></div>
+                    <div class="loading-dot"></div>
+                    <div class="loading-dot"></div>
+                </div>
+            </div>
         </div>
     </div>
 </main>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="authModal">
+    <div class="modal">
+        <div class="modal-title">
+            <span id="authModalTitle">Iniciar Sesión</span>
+            <button class="modal-close" onclick="closeModal('authModal')">✕</button>
+        </div>
+        <!-- Login Form -->
+        <div id="loginForm">
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input class="form-input" id="loginEmail" type="email" placeholder="tu@email.com" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Contraseña</label>
+                <input class="form-input" id="loginPassword" type="password" placeholder="••••••" />
+            </div>
+            <div class="form-error" id="loginError"></div>
+            <div class="modal-actions">
+                <button class="btn" onclick="closeModal('authModal')">Cancelar</button>
+                <button class="btn btn-primary" onclick="handleLogin()">Entrar</button>
+            </div>
+            <div class="auth-toggle">
+                ¿No tienes cuenta? <a onclick="toggleAuthMode('register')">Regístrate</a>
+            </div>
+        </div>
+        <!-- Register Form -->
+        <div id="registerForm" style="display: none;">
+            <div class="form-group">
+                <label class="form-label">Nombre de usuario</label>
+                <input class="form-input" id="registerUsername" type="text" placeholder="tu_nombre" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input class="form-input" id="registerEmail" type="email" placeholder="tu@email.com" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Contraseña (mín. 6 caracteres)</label>
+                <input class="form-input" id="registerPassword" type="password" placeholder="••••••" />
+            </div>
+            <div class="form-error" id="registerError"></div>
+            <div class="modal-actions">
+                <button class="btn" onclick="closeModal('authModal')">Cancelar</button>
+                <button class="btn btn-primary" onclick="handleRegister()">Crear Cuenta</button>
+            </div>
+            <div class="auth-toggle">
+                ¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- NEW MARKET MODAL -->
 <div class="modal-overlay" id="newMarketModal">
@@ -761,11 +819,11 @@
         </div>
         <div class="bet-modal-market" id="betModalTitle"></div>
         <div class="bet-position-select">
-            <button class="position-btn yes-btn" id="yesBtnSelect" onclick="selectPosition('YES')">
+            <button class="position-btn yes-btn" id="yesBtnSelect" onclick="selectPosition('yes')">
                 <span class="pos-label">SÍ</span>
                 <span class="pos-price" id="yesPriceDisplay">50 créditos</span>
             </button>
-            <button class="position-btn no-btn" id="noBtnSelect" onclick="selectPosition('NO')">
+            <button class="position-btn no-btn" id="noBtnSelect" onclick="selectPosition('no')">
                 <span class="pos-label">NO</span>
                 <span class="pos-price" id="noPriceDisplay">50 créditos</span>
             </button>
@@ -785,14 +843,222 @@
 <div class="toast" id="toast"></div>
 
 <script>
-    const API = 'http://localhost:3000';
+    // ─── Config ──────────────────────────────────────────────
+    const API = window.location.origin;
+
+    // ─── Auth State ──────────────────────────────────────────
+    let authToken = localStorage.getItem('eventox_token');
+    let currentUser = null;
     let allEvents = [];
     let selectedEventId = null;
     let selectedPosition = null;
     let currentFilter = 'all';
-    const USER_ID = 1; // temporary until auth
 
-    // FETCH EVENTS
+    // Helper: get auth headers for API calls
+    function authHeaders() {
+        const headers = { 'Content-Type': 'application/json' };
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+        return headers;
+    }
+
+    // ─── Auth Functions ──────────────────────────────────────
+
+    async function checkAuth() {
+        if (!authToken) {
+            renderHeader();
+            return;
+        }
+        try {
+            const res = await fetch(`${API}/auth/me`, { headers: authHeaders() });
+            if (!res.ok) throw new Error('Token invalid');
+            currentUser = await res.json();
+            renderHeader();
+        } catch (err) {
+            // Token expired or invalid — clear it
+            localStorage.removeItem('eventox_token');
+            authToken = null;
+            currentUser = null;
+            renderHeader();
+        }
+    }
+
+    function renderHeader() {
+        const el = document.getElementById('headerRight');
+        const navTabs = document.getElementById('navTabs');
+        const newMarketBtn = document.getElementById('newMarketBtn');
+
+        if (currentUser) {
+            el.innerHTML = `
+                <div class="credits-display">
+                    CRÉDITOS: <span class="credits-amount" id="userCredits">${currentUser.credits.toLocaleString()}</span>
+                </div>
+                <div class="user-display">${currentUser.username}</div>
+                <button class="btn btn-small btn-ghost" onclick="logout()">SALIR</button>
+            `;
+            navTabs.style.display = 'flex';
+            // Show "new market" button only for admins
+            if (currentUser.is_admin) {
+                newMarketBtn.style.display = 'inline-block';
+            }
+        } else {
+            el.innerHTML = `
+                <button class="btn btn-small" onclick="openAuthModal('login')">ENTRAR</button>
+                <button class="btn btn-primary btn-small" onclick="openAuthModal('register')">REGISTRARSE</button>
+            `;
+            navTabs.style.display = 'none';
+            newMarketBtn.style.display = 'none';
+        }
+    }
+
+    function openAuthModal(mode) {
+        toggleAuthMode(mode);
+        document.getElementById('authModal').classList.add('active');
+    }
+
+    function toggleAuthMode(mode) {
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const title = document.getElementById('authModalTitle');
+
+        if (mode === 'register') {
+            loginForm.style.display = 'none';
+            registerForm.style.display = 'block';
+            title.textContent = 'Crear Cuenta';
+        } else {
+            loginForm.style.display = 'block';
+            registerForm.style.display = 'none';
+            title.textContent = 'Iniciar Sesión';
+        }
+        // Clear errors
+        document.getElementById('loginError').classList.remove('show');
+        document.getElementById('registerError').classList.remove('show');
+    }
+
+    async function handleLogin() {
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
+        const errorEl = document.getElementById('loginError');
+
+        if (!email || !password) {
+            errorEl.textContent = 'Email y contraseña son requeridos.';
+            errorEl.classList.add('show');
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                errorEl.textContent = data.error || 'Error al iniciar sesión.';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            // Success — store token and user
+            authToken = data.token;
+            currentUser = data.user;
+            localStorage.setItem('eventox_token', authToken);
+            closeModal('authModal');
+            renderHeader();
+            showToast(`¡Bienvenido, ${currentUser.username}!`);
+
+            // Clear form
+            document.getElementById('loginEmail').value = '';
+            document.getElementById('loginPassword').value = '';
+        } catch (err) {
+            errorEl.textContent = 'Error de conexión.';
+            errorEl.classList.add('show');
+        }
+    }
+
+    async function handleRegister() {
+        const username = document.getElementById('registerUsername').value.trim();
+        const email = document.getElementById('registerEmail').value.trim();
+        const password = document.getElementById('registerPassword').value;
+        const errorEl = document.getElementById('registerError');
+
+        if (!username || !email || !password) {
+            errorEl.textContent = 'Todos los campos son requeridos.';
+            errorEl.classList.add('show');
+            return;
+        }
+
+        if (password.length < 6) {
+            errorEl.textContent = 'La contraseña debe tener al menos 6 caracteres.';
+            errorEl.classList.add('show');
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API}/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, email, password })
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                errorEl.textContent = data.error || 'Error al registrar.';
+                errorEl.classList.add('show');
+                return;
+            }
+
+            // Success — store token and user
+            authToken = data.token;
+            currentUser = data.user;
+            localStorage.setItem('eventox_token', authToken);
+            closeModal('authModal');
+            renderHeader();
+            showToast(`¡Cuenta creada! Tienes ${currentUser.credits} créditos.`);
+
+            // Clear form
+            document.getElementById('registerUsername').value = '';
+            document.getElementById('registerEmail').value = '';
+            document.getElementById('registerPassword').value = '';
+        } catch (err) {
+            errorEl.textContent = 'Error de conexión.';
+            errorEl.classList.add('show');
+        }
+    }
+
+    function logout() {
+        localStorage.removeItem('eventox_token');
+        authToken = null;
+        currentUser = null;
+        renderHeader();
+        showPage('markets');
+        showToast('Sesión cerrada.');
+    }
+
+    // ─── Page Navigation ─────────────────────────────────────
+
+    function showPage(page, tabBtn) {
+        // Hide all pages
+        document.querySelectorAll('.page-section').forEach(p => p.classList.remove('active'));
+        // Show selected
+        document.getElementById(`page-${page}`).classList.add('active');
+        // Update tabs
+        if (tabBtn) {
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            tabBtn.classList.add('active');
+        } else {
+            // Find matching tab
+            document.querySelectorAll('.nav-tab').forEach(t => {
+                t.classList.toggle('active', t.textContent.toLowerCase().includes(page === 'markets' ? 'mercados' : page === 'positions' ? 'posiciones' : 'ranking'));
+            });
+        }
+        // Load data for the page
+        if (page === 'positions' && currentUser) loadPositions();
+        if (page === 'leaderboard') loadLeaderboard();
+    }
+
+    // ─── Markets ─────────────────────────────────────────────
+
     async function loadEvents() {
         try {
             const res = await fetch(`${API}/events`);
@@ -819,8 +1085,8 @@
         const items = [...events, ...events].map(e => `
             <span class="ticker-item">
                 <span class="label">${e.title.substring(0, 50)}${e.title.length > 50 ? '...' : ''}</span>
-                <span class="yes-val">SÍ ${e.yes_price}¢</span>
-                <span class="no-val">NO ${e.no_price}¢</span>
+                <span class="yes-val">SÍ ${e.yes_price || 50}¢</span>
+                <span class="no-val">NO ${e.no_price || 50}¢</span>
             </span>
         `).join('');
         tickerEl.innerHTML = items;
@@ -836,13 +1102,11 @@
                 </div>`;
             return;
         }
-
         const cards = events.map(event => {
             const yesWidth = event.yes_price || 50;
             const closeDate = new Date(event.close_time).toLocaleDateString('es-CO', {
                 day: 'numeric', month: 'short', year: 'numeric'
             });
-
             return `
                 <div class="market-card">
                     <div class="market-tag">${event.resolution_source || 'Contrato Binario'}</div>
@@ -862,22 +1126,19 @@
                             <span>${event.resolved ? '✓ Resuelto' : 'Activo'}</span>
                         </div>
                         <div class="bet-buttons">
-                            <button class="btn-yes" onclick="openBetModal(${event.id}, 'YES')">SÍ</button>
-                            <button class="btn-no" onclick="openBetModal(${event.id}, 'NO')">NO</button>
+                            <button class="btn-yes" onclick="openBetModal(${event.id}, 'yes')">SÍ</button>
+                            <button class="btn-no" onclick="openBetModal(${event.id}, 'no')">NO</button>
                         </div>
                     </div>
                 </div>`;
         }).join('');
-
         container.innerHTML = `<div class="markets-grid">${cards}</div>`;
     }
 
-    // FILTER
     function filterMarkets(filter, btn) {
         currentFilter = filter;
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-
         if (filter === 'all') {
             renderMarkets(allEvents);
         } else {
@@ -890,14 +1151,23 @@
         }
     }
 
-    // CREATE MARKET
+    // ─── Create Market (Admin) ───────────────────────────────
+
+    function openNewMarketModal() {
+        if (!currentUser || !currentUser.is_admin) {
+            showToast('Solo administradores pueden crear mercados.', true);
+            return;
+        }
+        document.getElementById('newMarketModal').classList.add('active');
+    }
+
     async function createMarket() {
         const title = document.getElementById('eventTitle').value.trim();
         const description = document.getElementById('eventDesc').value.trim();
-        const closeTime = document.getElementById('eventCloseTime').value;
-        const resolutionSource = document.getElementById('eventSource').value.trim();
+        const close_time = document.getElementById('eventCloseTime').value;
+        const resolution_source = document.getElementById('eventSource').value.trim();
 
-        if (!title || !closeTime) {
+        if (!title || !close_time) {
             showToast('Título y fecha de cierre son requeridos', true);
             return;
         }
@@ -905,48 +1175,50 @@
         try {
             const res = await fetch(`${API}/events`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, description, closeTime, resolutionSource })
+                headers: authHeaders(),
+                body: JSON.stringify({ title, description, close_time, resolution_source })
             });
             const data = await res.json();
-            if (data.error) throw new Error(data.error);
+            if (!res.ok) throw new Error(data.error);
 
             closeModal('newMarketModal');
             showToast('¡Mercado creado exitosamente!');
             loadEvents();
-
-            // clear form
             ['eventTitle','eventDesc','eventCloseTime','eventSource'].forEach(id => {
                 document.getElementById(id).value = '';
             });
         } catch (err) {
-            showToast('Error creando el mercado', true);
+            showToast(err.message || 'Error creando el mercado', true);
         }
     }
 
-    // BET MODAL
+    // ─── Bet Modal ───────────────────────────────────────────
+
     function openBetModal(eventId, position) {
+        if (!currentUser) {
+            openAuthModal('login');
+            showToast('Inicia sesión para tomar posiciones.', true);
+            return;
+        }
+
         const event = allEvents.find(e => e.id === eventId);
         if (!event) return;
 
         selectedEventId = eventId;
         selectedPosition = position;
-
         document.getElementById('betModalTitle').textContent = event.title;
         document.getElementById('yesPriceDisplay').textContent = `${event.yes_price || 50} créditos`;
         document.getElementById('noPriceDisplay').textContent = `${event.no_price || 50} créditos`;
-
         selectPosition(position);
         document.getElementById('betModal').classList.add('active');
     }
 
     function selectPosition(pos) {
         selectedPosition = pos;
-        document.getElementById('yesBtnSelect').classList.toggle('selected', pos === 'YES');
-        document.getElementById('noBtnSelect').classList.toggle('selected', pos === 'NO');
+        document.getElementById('yesBtnSelect').classList.toggle('selected', pos === 'yes');
+        document.getElementById('noBtnSelect').classList.toggle('selected', pos === 'no');
     }
 
-    // PLACE BET
     async function placeBet() {
         const amount = parseInt(document.getElementById('betAmount').value);
         if (!selectedPosition || !amount || amount < 1) {
@@ -957,45 +1229,145 @@
         try {
             const res = await fetch(`${API}/bets`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({
-                    userId: USER_ID,
-                    eventId: selectedEventId,
+                    event_id: selectedEventId,
                     position: selectedPosition,
                     amount
                 })
             });
             const data = await res.json();
-            if (data.error) throw new Error(data.error);
+            if (!res.ok) throw new Error(data.error);
 
             closeModal('betModal');
-            showToast(`Posición ${selectedPosition} tomada por ${amount} créditos`);
+            showToast(`Posición ${selectedPosition.toUpperCase()} tomada por ${amount} créditos`);
 
-            // update credits display
-            const current = parseInt(document.getElementById('userCredits').textContent.replace(',',''));
-            document.getElementById('userCredits').textContent = (current - amount).toLocaleString();
+            // Refresh user credits
+            currentUser.credits -= amount;
+            document.getElementById('userCredits').textContent = currentUser.credits.toLocaleString();
         } catch (err) {
-            showToast('Error procesando la posición', true);
+            showToast(err.message || 'Error procesando la posición', true);
         }
     }
 
-    // MODALS
-    function openNewMarketModal() {
-        document.getElementById('newMarketModal').classList.add('active');
+    // ─── My Positions ────────────────────────────────────────
+
+    async function loadPositions() {
+        const container = document.getElementById('positionsContainer');
+        try {
+            const res = await fetch(`${API}/bets/mine`, { headers: authHeaders() });
+            const positions = await res.json();
+
+            if (positions.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>Sin posiciones</h3>
+                        <p>Aún no has tomado ninguna posición en los mercados.</p>
+                        <button class="btn btn-primary" onclick="showPage('markets')" style="margin-top: 0.5rem;">Ver Mercados</button>
+                    </div>`;
+                return;
+            }
+
+            const rows = positions.map(p => {
+                const date = new Date(p.created_at).toLocaleDateString('es-CO', {
+                    day: 'numeric', month: 'short'
+                });
+                const posClass = p.position === 'yes' ? 'pos-yes' : 'pos-no';
+                const statusClass = p.event_status === 'open' ? 'pos-status-open' : 'pos-status-resolved';
+                return `
+                    <tr>
+                        <td>${p.event_title}</td>
+                        <td class="${posClass}">${p.position.toUpperCase()}</td>
+                        <td>${p.amount}</td>
+                        <td class="${statusClass}">${p.event_status === 'open' ? 'Activo' : 'Resuelto'}</td>
+                        <td>${date}</td>
+                    </tr>`;
+            }).join('');
+
+            container.innerHTML = `
+                <table class="positions-table">
+                    <thead>
+                        <tr>
+                            <th>Mercado</th>
+                            <th>Posición</th>
+                            <th>Créditos</th>
+                            <th>Estado</th>
+                            <th>Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+        } catch (err) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>Error cargando posiciones</h3>
+                    <p>Intenta de nuevo más tarde.</p>
+                </div>`;
+        }
     }
+
+    // ─── Leaderboard ─────────────────────────────────────────
+
+    async function loadLeaderboard() {
+        const container = document.getElementById('leaderboardContainer');
+        try {
+            const res = await fetch(`${API}/leaderboard`);
+            const leaders = await res.json();
+
+            if (leaders.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>Sin jugadores</h3>
+                        <p>Sé el primero en registrarte y tomar posiciones.</p>
+                    </div>`;
+                return;
+            }
+
+            const items = leaders.map((l, i) => {
+                const rank = i + 1;
+                const rankClass = rank <= 3 ? 'lb-rank top-3' : 'lb-rank';
+                const isYou = currentUser && l.username === currentUser.username;
+                const nameClass = isYou ? 'lb-username is-you' : 'lb-username';
+                return `
+                    <div class="leaderboard-item">
+                        <span class="${rankClass}">#${rank}</span>
+                        <span class="${nameClass}">${l.username}${isYou ? ' (tú)' : ''}</span>
+                        <span class="lb-credits">${l.credits.toLocaleString()}¢</span>
+                    </div>`;
+            }).join('');
+
+            container.innerHTML = `<div class="leaderboard-list">${items}</div>`;
+        } catch (err) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>Error cargando ranking</h3>
+                    <p>Intenta de nuevo más tarde.</p>
+                </div>`;
+        }
+    }
+
+    // ─── Modals ──────────────────────────────────────────────
 
     function closeModal(id) {
         document.getElementById(id).classList.remove('active');
     }
 
-    // Close modal on overlay click
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) overlay.classList.remove('active');
         });
     });
 
-    // TOAST
+    // Enter key support for auth forms
+    document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleLogin();
+    });
+    document.getElementById('registerPassword').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleRegister();
+    });
+
+    // ─── Toast ───────────────────────────────────────────────
+
     function showToast(msg, isError = false) {
         const toast = document.getElementById('toast');
         toast.textContent = msg;
@@ -1003,9 +1375,11 @@
         setTimeout(() => toast.classList.remove('show'), 3000);
     }
 
-    // INIT
+    // ─── Init ────────────────────────────────────────────────
+
+    checkAuth();
     loadEvents();
-    setInterval(loadEvents, 30000); // refresh every 30s
+    setInterval(loadEvents, 30000);
 </script>
 </body>
 </html>
