@@ -684,9 +684,9 @@
         </div>
         <div class="filter-row">
             <button class="filter-btn active" onclick="filterMarkets('all', this)">Todos</button>
-            <button class="filter-btn" onclick="filterMarkets('política', this)">Política</button>
-            <button class="filter-btn" onclick="filterMarkets('economía', this)">Economía</button>
-            <button class="filter-btn" onclick="filterMarkets('crimen', this)">Seguridad</button>
+            <button class="filter-btn" onclick="filterMarkets('politics', this)">Política</button>
+            <button class="filter-btn" onclick="filterMarkets('economics', this)">Economía</button>
+            <button class="filter-btn" onclick="filterMarkets('security', this)">Seguridad</button>
         </div>
         <div id="marketsContainer">
             <div class="loading">
@@ -1182,11 +1182,7 @@
         if (filter === 'all') {
             renderMarkets(allEvents);
         } else {
-            const filtered = allEvents.filter(e =>
-                e.title.toLowerCase().includes(filter) ||
-                (e.description && e.description.toLowerCase().includes(filter)) ||
-                (e.resolution_source && e.resolution_source.toLowerCase().includes(filter))
-            );
+            const filtered = allEvents.filter(e => e.category === filter);
             renderMarkets(filtered);
         }
     }
@@ -1401,7 +1397,7 @@
                 </div>`;
         }
     }
-    
+
     // ─── Leaderboard ─────────────────────────────────────────
 
     async function loadLeaderboard() {
