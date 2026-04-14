@@ -289,6 +289,56 @@
             display: inline-block;
             margin-bottom: 0.75rem;
         }
+        .market-card-img {
+            width: 100%;
+            height: 140px;
+            overflow: hidden;
+            position: relative;
+            margin: -1.5rem -1.5rem 1rem -1.5rem;
+            width: calc(100% + 3rem);
+        }
+        .market-card-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: grayscale(30%) brightness(0.7);
+            transition: filter 0.3s;
+        }
+        .market-card:hover .market-card-img img {
+            filter: grayscale(0%) brightness(0.85);
+        }
+        .market-card-img::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 60%;
+            background: linear-gradient(transparent, var(--bg));
+            pointer-events: none;
+        }
+        .market-card-img .market-tag {
+            position: absolute;
+            top: 0.75rem;
+            left: 0.75rem;
+            z-index: 2;
+            margin: 0;
+        }
+        .market-card-fallback {
+            width: 100%;
+            height: 140px;
+            margin: -1.5rem -1.5rem 1rem -1.5rem;
+            width: calc(100% + 3rem);
+            position: relative;
+        }
+        .market-card-fallback.politics { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); }
+        .market-card-fallback.economics { background: linear-gradient(135deg, #1a2e1a 0%, #0f2b1d 100%); }
+        .market-card-fallback.security { background: linear-gradient(135deg, #2e1a1a 0%, #2b0f0f 100%); }
+        .market-card-fallback .market-tag {
+            position: absolute;
+            top: 0.75rem;
+            left: 0.75rem;
+        }
+        
+
         .market-title {
             font-family: 'Syne', sans-serif;
             font-size: 1rem;
@@ -834,6 +884,10 @@
             <label class="form-label">Fuente de Resolución</label>
             <input class="form-input" id="eventSource" placeholder="Registraduría, DANE, Fiscalía..." />
         </div>
+        <div class="form-group">
+            <label class="form-label">URL de Imagen</label>
+            <input class="form-input" id="eventImage" placeholder="https://upload.wikimedia.org/..." />
+        </div>
         <div class="modal-actions">
             <button class="btn" onclick="closeModal('newMarketModal')">Cancelar</button>
             <button class="btn btn-primary" onclick="createMarket()">Crear Mercado</button>
@@ -1159,9 +1213,18 @@
             const closeDate = new Date(event.close_time).toLocaleDateString('es-CO', {
                 day: 'numeric', month: 'short', year: 'numeric'
             });
+            const cat = event.category || 'politics';
+            const imageHtml = event.image_url
+                ? `<div class="market-card-img">
+                       <img src="${event.image_url}" alt="" loading="lazy" onerror="this.parentElement.className='market-card-fallback ${cat}'"/>
+                       <div class="market-tag">${event.resolution_source || 'Contrato Binario'}</div>
+                   </div>`
+                : `<div class="market-card-fallback ${cat}">
+                       <div class="market-tag">${event.resolution_source || 'Contrato Binario'}</div>
+                   </div>`;
             return `
                 <div class="market-card">
-                    <div class="market-tag">${event.resolution_source || 'Contrato Binario'}</div>
+                    ${imageHtml}
                     <div class="market-title">${event.title}</div>
                     <div class="price-bar-container">
                         <div class="price-bar">
@@ -1184,9 +1247,7 @@
                     </div>
                 </div>`;
         }).join('');
-        container.innerHTML = `<div class="markets-grid">${cards}</div>`;
     }
-
     function filterMarkets(filter, btn) {
         currentFilter = filter;
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -1214,6 +1275,7 @@
         const description = document.getElementById('eventDesc').value.trim();
         const close_time = document.getElementById('eventCloseTime').value;
         const resolution_source = document.getElementById('eventSource').value.trim();
+        const image_url = document.getElementById('eventImage').value.trim();
 
         if (!title || !close_time) {
             showToast('Título y fecha de cierre son requeridos', true);
@@ -1224,7 +1286,7 @@
             const res = await fetch(`${API}/events`, {
                 method: 'POST',
                 headers: authHeaders(),
-                body: JSON.stringify({ title, description, close_time, resolution_source })
+                body: JSON.stringify({ title, description, close_time, resolution_source, image_url })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
@@ -1232,7 +1294,7 @@
             closeModal('newMarketModal');
             showToast('¡Mercado creado exitosamente!');
             loadEvents();
-            ['eventTitle','eventDesc','eventCloseTime','eventSource'].forEach(id => {
+            ['eventTitle','eventDesc','eventCloseTime','eventSource', 'eventImage'].forEach(id => {
                 document.getElementById(id).value = '';
             });
         } catch (err) {
