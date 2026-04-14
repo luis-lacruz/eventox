@@ -212,4 +212,4 @@ MIT
 ## Author
 
 **Luis S. Lacruz**  
-[GitHub](https://github.com/YOUR_USERNAME) · [LinkedIn](https://linkedin.com/in/luis-lacruz)
+[GitHub](https://github.com/luis-lacruz) · [LinkedIn](https://linkedin.com/in/luis-lacruz)
