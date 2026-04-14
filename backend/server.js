@@ -303,6 +303,70 @@ app.post("/events", authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /events/:id/resolve
+ * Admin resolves a market as YES or NO.
+ * Body: { result: "yes"|"no" }
+ *
+ * Flow:
+ * 1. Mark the event as resolved
+ * 2. Find all winning bets
+ * 3. Pay out winners (2x their stake — they risked credits and won)
+ * 4. Return summary of payouts
+ */
+app.post("/events/:id/resolve", authenticateToken, requireAdmin, async (req, res) => {
+  const eventId = req.params.id;
+  const { result } = req.body;
+
+  if (!result || !["yes", "no"].includes(result.toLowerCase())) {
+    return res.status(400).json({ error: 'Result must be "yes" or "no".' });
+  }
+
+  try {
+    // Check event exists and is still open
+    const eventResult = await pool.query("SELECT * FROM events WHERE id = $1", [eventId]);
+    if (eventResult.rows.length === 0) {
+      return res.status(404).json({ error: "Market not found." });
+    }
+    if (eventResult.rows[0].status === 'resolved') {
+      return res.status(400).json({ error: "Market already resolved." });
+    }
+
+    // Mark as resolved
+    await pool.query(
+      "UPDATE events SET status = 'resolved', resolved_as = $1 WHERE id = $2",
+      [result.toLowerCase(), eventId]
+    );
+
+    // Find winning bets and pay out 2x their stake
+    const winningBets = await pool.query(
+      "SELECT user_id, amount FROM bets WHERE event_id = $1 AND position = $2",
+      [eventId, result.toLowerCase()]
+    );
+
+    let totalPaid = 0;
+    for (const bet of winningBets.rows) {
+      const payout = bet.amount * 2;
+      await pool.query(
+        "UPDATE users SET credits = credits + $1 WHERE id = $2",
+        [payout, bet.user_id]
+      );
+      totalPaid += payout;
+    }
+
+    res.json({
+      message: `Mercado resuelto como ${result.toUpperCase()}.`,
+      winners: winningBets.rows.length,
+      total_paid: totalPaid
+    });
+  } catch (err) {
+    console.error("Resolve market error:", err.message);
+    res.status(500).json({ error: "Failed to resolve market." });
+  }
+});
+
+
+
 // ─── Positions (Bets) ───────────────────────────────────────
 
 /**

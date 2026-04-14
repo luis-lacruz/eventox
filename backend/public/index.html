@@ -734,7 +734,7 @@
             <div class="section-header">
                 <div class="section-title">Admin — Regalar Créditos</div>
             </div>
-            <div style="max-width: 400px;">
+            <div style="max-width: 400px; margin-bottom: 3rem;">
                 <div class="form-group">
                     <label class="form-label">Nombre de usuario</label>
                     <input class="form-input" id="giftUsername" placeholder="nombre_usuario" />
@@ -744,6 +744,16 @@
                     <input class="form-input" type="number" id="giftAmount" value="500" min="1" />
                 </div>
                 <button class="btn btn-primary" onclick="giftCredits()">Enviar Créditos</button>
+            </div>
+            <div class="section-header">
+                <div class="section-title">Admin — Resolver Mercados</div>
+            </div>
+            <div id="adminMarketsContainer">
+                <div class="loading">
+                    <div class="loading-dot"></div>
+                    <div class="loading-dot"></div>
+                    <div class="loading-dot"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -1079,6 +1089,7 @@
         // Load data for the page
         if (page === 'positions' && currentUser) loadPositions();
         if (page === 'leaderboard') loadLeaderboard();
+        if (page === 'admin') loadAdminMarkets();
     }
 
     // ─── Markets ─────────────────────────────────────────────
@@ -1403,6 +1414,77 @@
         toast.className = `toast${isError ? ' error' : ''} show`;
         setTimeout(() => toast.classList.remove('show'), 3000);
     }
+
+    // ─── Admin: Resolve Markets ──────────────────────────────
+
+    async function loadAdminMarkets() {
+        const container = document.getElementById('adminMarketsContainer');
+        try {
+            const res = await fetch(`${API}/events`);
+            const events = await res.json();
+            const openEvents = events.filter(e => e.status !== 'resolved');
+
+            if (openEvents.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No hay mercados abiertos</h3>
+                        <p>Todos los mercados han sido resueltos.</p>
+                    </div>`;
+                return;
+            }
+
+            const cards = openEvents.map(e => {
+                const closeDate = new Date(e.close_time).toLocaleDateString('es-CO', {
+                    day: 'numeric', month: 'short', year: 'numeric'
+                });
+                return `
+                    <div style="background: var(--bg); border: 1px solid var(--border); padding: 1.25rem; margin-bottom: 0.75rem;">
+                        <div style="font-family: 'Syne', sans-serif; font-weight: 600; margin-bottom: 0.5rem;">${e.title}</div>
+                        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--muted); margin-bottom: 1rem;">
+                            Cierre: ${closeDate} · ${e.resolution_source || 'Sin fuente'}
+                        </div>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn-yes" onclick="resolveMarket(${e.id}, 'yes')">RESOLVER SÍ</button>
+                            <button class="btn-no" onclick="resolveMarket(${e.id}, 'no')">RESOLVER NO</button>
+                        </div>
+                    </div>`;
+            }).join('');
+
+            container.innerHTML = cards;
+        } catch (err) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>Error cargando mercados</h3>
+                </div>`;
+        }
+    }
+
+    async function resolveMarket(eventId, result) {
+        if (!confirm(`¿Resolver este mercado como ${result.toUpperCase()}? Esta acción no se puede deshacer.`)) return;
+
+        try {
+            const res = await fetch(`${API}/events/${eventId}/resolve`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ result })
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                showToast(data.error, true);
+                return;
+            }
+
+            showToast(`${data.message} ${data.winners} ganador${data.winners === 1 ? '' : 'es'}, ${data.total_paid} créditos pagados.`);
+            loadAdminMarkets();
+            loadEvents();
+        } catch (err) {
+            showToast('Error resolviendo mercado.', true);
+        }
+    }
+
+
+
 
     // ─── Credits ─────────────────────────────────────────────
 
