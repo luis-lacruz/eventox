@@ -134,6 +134,7 @@
             color: var(--accent);
             border-bottom-color: var(--accent);
         }
+
         /* TICKER */
         .ticker {
             background: var(--bg2);
@@ -159,8 +160,8 @@
         .ticker-item .yes-val { color: var(--yes); }
         .ticker-item .no-val { color: var(--no); }
         @keyframes ticker {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
+            0% { transform: translateX(100vw); }
+            100% { transform: translateX(-100%); }
         }
         /* MAIN LAYOUT */
         main {
@@ -646,6 +647,7 @@
     <button class="nav-tab active" onclick="showPage('markets', this)">Mercados</button>
     <button class="nav-tab" onclick="showPage('positions', this)">Mis Posiciones</button>
     <button class="nav-tab" onclick="showPage('leaderboard', this)">Ranking</button>
+    <button class="nav-tab" id="adminTab" style="display:none;" onclick="showPage('admin', this)">Admin</button>
 </div>
 
 <!-- TICKER -->
@@ -723,6 +725,25 @@
                     <div class="loading-dot"></div>
                     <div class="loading-dot"></div>
                 </div>
+            </div>
+        </div>
+    </div>
+    <!-- ADMIN PAGE -->
+    <div class="page-section" id="page-admin">
+        <div style="padding: 2rem 0;">
+            <div class="section-header">
+                <div class="section-title">Admin — Regalar Créditos</div>
+            </div>
+            <div style="max-width: 400px;">
+                <div class="form-group">
+                    <label class="form-label">Nombre de usuario</label>
+                    <input class="form-input" id="giftUsername" placeholder="nombre_usuario" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cantidad de créditos</label>
+                    <input class="form-input" type="number" id="giftAmount" value="500" min="1" />
+                </div>
+                <button class="btn btn-primary" onclick="giftCredits()">Enviar Créditos</button>
             </div>
         </div>
     </div>
@@ -893,13 +914,16 @@
                     CRÉDITOS: <span class="credits-amount" id="userCredits">${currentUser.credits.toLocaleString()}</span>
                 </div>
                 <div class="user-display">${currentUser.username}</div>
+                <button class="btn btn-small" onclick="claimDailyBonus()">BONO DIARIO</button>
                 <button class="btn btn-small btn-ghost" onclick="logout()">SALIR</button>
             `;
             navTabs.style.display = 'flex';
             // Show "new market" button only for admins
             if (currentUser.is_admin) {
                 newMarketBtn.style.display = 'inline-block';
+                document.getElementById('adminTab').style.display = 'inline-block';
             }
+
         } else {
             el.innerHTML = `
                 <button class="btn btn-small" onclick="openAuthModal('login')">ENTRAR</button>
@@ -1378,6 +1402,58 @@
         toast.textContent = msg;
         toast.className = `toast${isError ? ' error' : ''} show`;
         setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    // ─── Credits ─────────────────────────────────────────────
+
+    async function claimDailyBonus() {
+        try {
+            const res = await fetch(`${API}/credits/daily`, {
+                method: 'POST',
+                headers: authHeaders()
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                showToast(data.error, true);
+                return;
+            }
+
+            currentUser.credits = data.credits;
+            document.getElementById('userCredits').textContent = data.credits.toLocaleString();
+            showToast(data.message);
+        } catch (err) {
+            showToast('Error reclamando bono.', true);
+        }
+    }
+
+    async function giftCredits() {
+        const username = document.getElementById('giftUsername').value.trim();
+        const amount = parseInt(document.getElementById('giftAmount').value);
+
+        if (!username || !amount) {
+            showToast('Nombre de usuario y cantidad son requeridos.', true);
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API}/admin/gift-credits`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ username, amount })
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                showToast(data.error, true);
+                return;
+            }
+
+            showToast(data.message);
+            document.getElementById('giftUsername').value = '';
+        } catch (err) {
+            showToast('Error enviando créditos.', true);
+        }
     }
 
     // ─── Init ────────────────────────────────────────────────
