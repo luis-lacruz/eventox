@@ -1064,7 +1064,7 @@
             const res = await fetch(`${API}/events`);
             allEvents = await res.json();
             renderMarkets(allEvents);
-            updateStats(allEvents);
+            updateStats();
             updateTicker(allEvents);
         } catch (err) {
             document.getElementById('marketsContainer').innerHTML = `
@@ -1075,8 +1075,13 @@
         }
     }
 
-    function updateStats(events) {
-        document.getElementById('totalMarkets').textContent = events.length;
+    async function updateStats() {
+        try {
+            const res = await fetch(`${API}/stats`);
+            const data = await res.json();
+            document.getElementById('totalMarkets').textContent = data.markets;
+            document.getElementById('totalBets').textContent = data.positions;
+        } catch (err) {}
     }
 
     function updateTicker(events) {

@@ -409,6 +409,26 @@ app.get("/leaderboard", async (req, res) => {
   }
 });
 
+// ─── Serve Frontend ──────────────────────────────────────
+// ─── Stats ───────────────────────────────────────────────
+
+app.get("/stats", async (req, res) => {
+  try {
+    const events = await pool.query("SELECT COUNT(*) FROM events");
+    const bets = await pool.query("SELECT COUNT(*) FROM bets");
+    res.json({
+      markets: parseInt(events.rows[0].count),
+      positions: parseInt(bets.rows[0].count)
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
+
+
+
+
 // ─── Serve Frontend ──────────────────────────────────────────
 
 app.get("/", (req, res) => {
