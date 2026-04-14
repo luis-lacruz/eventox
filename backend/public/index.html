@@ -146,7 +146,7 @@
         .ticker-inner {
             display: inline-flex;
             gap: 3rem;
-            animation: ticker 30s linear infinite;
+            animation: none;
         }
         .ticker-item {
             font-family: 'IBM Plex Mono', monospace;
@@ -160,8 +160,8 @@
         .ticker-item .yes-val { color: var(--yes); }
         .ticker-item .no-val { color: var(--no); }
         @keyframes ticker {
-            0% { transform: translateX(100vw); }
-            100% { transform: translateX(-100%); }
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
         }
         /* MAIN LAYOUT */
         main {
@@ -1122,14 +1122,26 @@
     function updateTicker(events) {
         if (events.length === 0) return;
         const tickerEl = document.getElementById('ticker');
-        const items = [...events, ...events].map(e => `
+
+        // Create enough copies to fill the screen twice
+        const copies = Math.max(8, Math.ceil(40 / events.length));
+        let repeated = [];
+        for (let i = 0; i < copies; i++) repeated = repeated.concat(events);
+
+        const items = repeated.map(e => `
             <span class="ticker-item">
                 <span class="label">${e.title.substring(0, 50)}${e.title.length > 50 ? '...' : ''}</span>
                 <span class="yes-val">SÍ ${e.yes_price || 50}¢</span>
                 <span class="no-val">NO ${e.no_price || 50}¢</span>
             </span>
         `).join('');
+
         tickerEl.innerHTML = items;
+
+        // Set animation speed based on content width — consistent pixels per second
+        const pixelsPerSecond = 50;
+        const duration = tickerEl.scrollWidth / 2 / pixelsPerSecond;
+        tickerEl.style.animation = `ticker ${duration}s linear infinite`;
     }
 
     function renderMarkets(events) {
