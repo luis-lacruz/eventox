@@ -276,7 +276,7 @@ app.get("/events", async (req, res) => {
  * Body: { title, description?, category?, resolution_source?, close_time? }
  */
 app.post("/events", authenticateToken, requireAdmin, async (req, res) => {
-  const { title, description, category, resolution_source, close_time } =
+  const { title, description, category, resolution_source, close_time, image_url } =
     req.body;
 
   if (!title) {
@@ -294,6 +294,7 @@ app.post("/events", authenticateToken, requireAdmin, async (req, res) => {
         category || "politics",
         resolution_source || null,
         close_time || null,
+        image_url || null, 
       ]
     );
     res.status(201).json(result.rows[0]);
