@@ -39,7 +39,7 @@ Users forecast outcomes on politics, economics, and public policy using play-mon
 | Framework | Express.js |
 | Database | PostgreSQL |
 | Frontend | Vanilla HTML / CSS / JS |
-| Auth | JWT + bcrypt *(planned)* |
+| Auth | JWT + bcrypt |
 
 ---
 
@@ -142,43 +142,43 @@ Visit **http://localhost:3000**
 |---|---|---|
 | `GET` | `/health` | Server status check |
 | `GET` | `/health/db` | Database connection check |
+| `GET` | `/stats` | Market and position counts |
+
+### Authentication
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/auth/register` | No | Create account → returns JWT |
+| `POST` | `/auth/login` | No | Login → returns JWT |
+| `GET` | `/auth/me` | Yes | Current user info |
 
 ### Events (Markets)
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/events` | List all markets |
-| `POST` | `/events` | Create a new market |
-
-#### `POST /events` — Request body
-
-```json
-{
-  "title": "Will Colombia's GDP growth exceed 3%?",
-  "description": "Based on DANE official 2026 report",
-  "category": "economics",
-  "resolution_source": "DANE official publication",
-  "close_time": "2027-03-01T00:00:00Z"
-}
-```
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/events` | No | List all markets |
+| `POST` | `/events` | Admin | Create a new market |
+| `POST` | `/events/:id/resolve` | Admin | Resolve market as YES/NO, pays winners |
 
 ### Positions (Bets)
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/bets` | Place a YES or NO position |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/bets` | Yes | Place a YES or NO position |
+| `GET` | `/bets/mine` | Yes | List current user's positions with results |
 
-#### `POST /bets` — Request body
+### Credits
 
-```json
-{
-  "event_id": 1,
-  "position": "yes",
-  "amount": 100
-}
-```
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/credits/daily` | Yes | Claim 200 free credits every 24h |
+| `POST` | `/admin/gift-credits` | Admin | Gift credits to a user by username |
 
----
+### Leaderboard
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/leaderboard` | No | Top 20 users by credits |
 
 ## Roadmap
 
@@ -186,12 +186,15 @@ Visit **http://localhost:3000**
 - [x] Events CRUD API
 - [x] Position placement endpoint
 - [x] Dark-themed frontend with live market cards
-- [ ] User authentication (JWT + bcrypt)
-- [ ] User dashboard — track open positions and history
-- [ ] Admin panel — create and resolve markets
-- [ ] Leaderboard — top predictors by profit
+- [x] User authentication (JWT + bcrypt)
+- [x] User dashboard — track open positions and history
+- [x] Admin panel — create and resolve markets
+- [x] Leaderboard — top predictors by profit
+- [x] Daily login bonus + admin credit gifting
+- [x] Win/loss history with performance stats
 - [ ] Deploy to cloud (Railway / Render)
 - [ ] Dynamic pricing engine (order book model)
+- [ ] Rate limiting and input sanitization
 
 ---
 

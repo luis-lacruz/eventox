@@ -1,48 +1,34 @@
 -- EventoX Database Setup
 -- Run: psql eventox < db/setup.sql
 
--- Markets table
-CREATE TABLE IF NOT EXISTS events (
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  credits INTEGER DEFAULT 1000,
+  is_admin BOOLEAN DEFAULT false,
+  last_bonus_claim TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE events (
   id SERIAL PRIMARY KEY,
   title TEXT NOT NULL,
   description TEXT,
   category TEXT DEFAULT 'politics',
   status TEXT DEFAULT 'open',
+  resolved_as TEXT CHECK (resolved_as IN ('yes', 'no')),
   resolution_source TEXT,
   close_time TIMESTAMP,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Positions table
-CREATE TABLE IF NOT EXISTS bets (
+CREATE TABLE bets (
   id SERIAL PRIMARY KEY,
-  event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+  event_id INTEGER REFERENCES events(id),
+  user_id INTEGER REFERENCES users(id),
   position TEXT NOT NULL CHECK (position IN ('yes', 'no')),
   amount INTEGER NOT NULL DEFAULT 100,
   created_at TIMESTAMP DEFAULT NOW()
 );
-
--- Seed data: sample Colombian markets
-INSERT INTO events (title, description, category, resolution_source, close_time)
-VALUES
-  (
-    '¿Será Gustavo Petro declarado oficialmente ganador de la Elección Presidencial de Colombia 2026?',
-    'Resolución basada en resultados oficiales certificados.',
-    'politics',
-    'Registraduría Nacional del Estado Civil',
-    '2026-05-31 06:00:00'
-  ),
-  (
-    '¿Superará el crecimiento real del PIB de Colombia el 3.0% para el año 2026 según el DANE?',
-    'Basado en la publicación anual oficial del DANE.',
-    'economics',
-    'DANE publicación oficial',
-    '2027-03-01 00:00:00'
-  ),
-  (
-    '¿Se mantendrá la inflación por encima del 5% para el mes de junio 2026?',
-    'Basado en el reporte mensual del IPC publicado por el DANE.',
-    'economics',
-    'DANE reporte IPC mensual',
-    '2026-07-05 00:00:00'
-  );
