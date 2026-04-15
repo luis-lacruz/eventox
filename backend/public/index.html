@@ -745,36 +745,6 @@
             font-size: 0.75rem;
             color: var(--muted);
         }
-        /* HISTORY TABLE */
-        .history-table {
-            width: 100%;
-            border-collapse: collapse;
-            border: 1px solid var(--border);
-            margin-bottom: 2rem;
-        }
-        .history-table th {
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--muted);
-            text-align: left;
-            padding: 0.8rem 1rem;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg2);
-        }
-        .history-table td {
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.78rem;
-            padding: 0.8rem 1rem;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg);
-        }
-        .history-table tr:hover td { background: var(--bg2); }
-        .tx-bet { color: var(--no); }
-        .tx-win { color: var(--yes); }
-        .tx-sell { color: var(--accent); }
-        .tx-loss { color: var(--muted); }
         @media (max-width: 600px) {
             .hero { grid-template-columns: 1fr; }
             .stats-row { text-align: left; }
@@ -800,8 +770,7 @@
     <button class="nav-tab active" onclick="showPage('markets', this)">Mercados</button>
     <button class="nav-tab" onclick="showPage('positions', this)">Mis Posiciones</button>
     <button class="nav-tab" onclick="showPage('leaderboard', this)">Ranking</button>
-    <button class="nav-tab" onclick="showPage('history', this)">Historial</button>
-    <button class="nav-tab" id="adminTab" style="display:none;" onclick="showPage('admin', this)">Admin</button>
+<button class="nav-tab" id="adminTab" style="display:none;" onclick="showPage('admin', this)">Admin</button>
 </div>
 
 <!-- TICKER -->
@@ -882,22 +851,6 @@
             </div>
         </div>
     </div>
-    <!-- HISTORY PAGE -->
-    <div class="page-section" id="page-history">
-        <div style="padding: 2rem 0;">
-            <div class="section-header">
-                <div class="section-title">Historial de Transacciones</div>
-            </div>
-            <div id="historyContainer">
-                <div class="loading">
-                    <div class="loading-dot"></div>
-                    <div class="loading-dot"></div>
-                    <div class="loading-dot"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- ADMIN PAGE -->
     <div class="page-section" id="page-admin">
         <div style="padding: 2rem 0;">
@@ -1306,7 +1259,7 @@
             // Find matching tab
             const pageKeywords = {
                 markets: 'mercados', positions: 'posiciones',
-                history: 'historial', leaderboard: 'ranking', admin: 'admin'
+                leaderboard: 'ranking', admin: 'admin'
             };
             const kw = pageKeywords[page] || page;
             document.querySelectorAll('.nav-tab').forEach(t => {
@@ -1316,8 +1269,7 @@
         // Load data for the page
         if (page === 'positions' && currentUser) loadPositions();
         if (page === 'leaderboard') loadLeaderboard();
-        if (page === 'history' && currentUser) loadHistory();
-        if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
+if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
     }
 
     // ─── Markets ─────────────────────────────────────────────
@@ -2262,68 +2214,6 @@
                 });
             } catch (err) { /* silently ignore chart errors */ }
         }));
-    }
-
-    // ─── Transaction History ─────────────────────────────────
-
-    async function loadHistory() {
-        const container = document.getElementById('historyContainer');
-        try {
-            const res = await fetch(`${API}/transactions/mine`, { headers: authHeaders() });
-            if (!res.ok) throw new Error(`Server error ${res.status}`);
-            const txs = await res.json();
-            if (!Array.isArray(txs) || txs.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <h3>Sin transacciones</h3>
-                        <p>Tus transacciones aparecerán aquí después de tomar posiciones.</p>
-                        <button class="btn btn-primary" onclick="showPage('markets', null)" style="margin-top:0.5rem;">Ver Mercados</button>
-                    </div>`;
-                return;
-            }
-            const typeConfig = {
-                bet_placed: { label: 'Posición',  cls: 'tx-bet',  sign: '-' },
-                winnings:   { label: 'Ganancia',  cls: 'tx-win',  sign: '+' },
-                sell:       { label: 'Venta',     cls: 'tx-sell', sign: '+' },
-                loss:       { label: 'Pérdida',   cls: 'tx-loss', sign: '-' },
-            };
-            const rows = txs.map(tx => {
-                const t = typeConfig[tx.type] || { label: tx.type, cls: '', sign: '' };
-                const date = new Date(tx.created_at).toLocaleDateString('es-CO', {
-                    day: 'numeric', month: 'short', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit'
-                });
-                const amtDisplay = tx.amount > 0 ? `${t.sign}${tx.amount}` : '—';
-                return `
-                    <tr>
-                        <td>${date}</td>
-                        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${tx.event_title || '—'}</td>
-                        <td class="${t.cls}">${t.label}</td>
-                        <td class="${t.cls}" style="text-align:right;font-weight:600;">${amtDisplay}</td>
-                        <td style="color:var(--muted);font-size:0.72rem;">${tx.description || ''}</td>
-                    </tr>`;
-            }).join('');
-            container.innerHTML = `
-                <table class="history-table">
-                    <thead>
-                        <tr>
-                            <th>Fecha</th>
-                            <th>Mercado</th>
-                            <th>Tipo</th>
-                            <th style="text-align:right;">Monto</th>
-                            <th>Descripción</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>`;
-        } catch (err) {
-            console.error('loadHistory error:', err);
-            container.innerHTML = `
-                <div class="empty-state">
-                    <h3>Error cargando historial</h3>
-                    <p>Intenta de nuevo más tarde.</p>
-                </div>`;
-        }
     }
 
     // ─── Init ────────────────────────────────────────────────
