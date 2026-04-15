@@ -732,8 +732,14 @@
             width: 100%;
             margin: 0.5rem 0;
             position: relative;
+            overflow: hidden;
         }
-        .market-chart-wrap canvas { display: block; width: 100% !important; }
+        .market-chart-wrap canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+            pointer-events: none;
+        }
         /* HISTORY TABLE */
         .history-table {
             width: 100%;
