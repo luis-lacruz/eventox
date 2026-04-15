@@ -2051,11 +2051,17 @@
 
     async function loadDetailChart(eventId) {
         if (typeof Chart === 'undefined') return;
+
+        // Destroy old chart first, then replace the canvas node entirely —
+        // Chart.js keeps internal state tied to the canvas element and will
+        // silently refuse to render on a canvas it has already used.
+        if (_detailChart) { _detailChart.destroy(); _detailChart = null; }
+        const wrap = document.getElementById('detailChartWrap');
+        wrap.innerHTML =
+            '<canvas id="detailChart"></canvas>' +
+            '<div class="detail-chart-empty" id="detailChartEmpty" style="display:none;">Sin historial de precios aún</div>';
         const canvas  = document.getElementById('detailChart');
         const emptyEl = document.getElementById('detailChartEmpty');
-        if (_detailChart) { _detailChart.destroy(); _detailChart = null; }
-        canvas.style.display = 'block';
-        emptyEl.style.display = 'none';
 
         try {
             const res = await fetch(`${API}/events/${eventId}/price-history`);
@@ -2066,6 +2072,15 @@
                 emptyEl.style.display = 'flex';
                 return;
             }
+
+            // Auto-scale y-axis to the actual data range so small moves are visible
+            const prices = history.map(h => h.yes_price);
+            const dataMin = Math.min(...prices);
+            const dataMax = Math.max(...prices);
+            const pad = Math.max(4, Math.round((dataMax - dataMin) * 0.25) || 6);
+            const yMin = Math.max(1,  dataMin - pad);
+            const yMax = Math.min(99, dataMax + pad);
+
             const labels = history.map(h =>
                 new Date(h.recorded_at).toLocaleDateString('es-CO', {
                     day: 'numeric', month: 'short',
@@ -2078,7 +2093,7 @@
                     labels,
                     datasets: [{
                         label: 'SÍ %',
-                        data: history.map(h => h.yes_price),
+                        data: prices,
                         borderColor: '#e8ff47',
                         borderWidth: 2,
                         fill: true,
@@ -2119,7 +2134,8 @@
                         },
                         y: {
                             display: true,
-                            min: 0, max: 100,
+                            min: yMin,
+                            max: yMax,
                             position: 'right',
                             grid: { color: '#1f1f2a', drawBorder: false },
                             ticks: {
