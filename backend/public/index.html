@@ -1329,6 +1329,11 @@
             renderMarkets(allEvents);
             updateStats();
             updateTicker(allEvents);
+            // Keep admin badge count fresh without loading the full admin panel
+            if (currentUser?.is_admin) {
+                const urgentCount = allEvents.filter(e => e.status === 'closed' || e.status === 'overdue').length;
+                updateAdminBadge(urgentCount);
+            }
         } catch (err) {
             document.getElementById('marketsContainer').innerHTML = `
                 <div class="empty-state">
@@ -1396,6 +1401,18 @@
                 : `<div class="market-card-fallback ${cat}">
                        <div class="market-tag">${event.resolution_source || 'Contrato Binario'}</div>
                    </div>`;
+            const statusLabel = event.status === 'resolved' ? '✓ Resuelto'
+                : event.status === 'overdue'  ? '⚠ Resolución vencida'
+                : event.status === 'closed'   ? '⏱ Pendiente resolución'
+                : 'Activo';
+            const statusColor = event.status === 'resolved' ? 'var(--muted)'
+                : event.status === 'overdue'  ? 'var(--no)'
+                : event.status === 'closed'   ? 'var(--accent)'
+                : 'var(--yes)';
+            const betBtns = event.status === 'open'
+                ? `<button class="btn-yes" onclick="event.stopPropagation();openBetModal(${event.id},'yes')">SÍ</button>
+                   <button class="btn-no"  onclick="event.stopPropagation();openBetModal(${event.id},'no')">NO</button>`
+                : `<span style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:${statusColor};">${statusLabel}</span>`;
             return `
                 <div class="market-card" onclick="openMarketDetail(${event.id})">
                     ${imageHtml}
@@ -1412,12 +1429,9 @@
                     <div class="market-footer">
                         <div class="market-meta">
                             <span>Cierre: ${closeDate}</span>
-                            <span>${event.resolved ? '✓ Resuelto' : 'Activo'}</span>
+                            <span style="color:${statusColor};">${statusLabel}</span>
                         </div>
-                        <div class="bet-buttons">
-                            <button class="btn-yes" onclick="event.stopPropagation();openBetModal(${event.id}, 'yes')">SÍ</button>
-                            <button class="btn-no" onclick="event.stopPropagation();openBetModal(${event.id}, 'no')">NO</button>
-                        </div>
+                        <div class="bet-buttons">${betBtns}</div>
                     </div>
                 </div>`;
         }).join('');
@@ -1863,35 +1877,69 @@
 
     // ─── Admin: Resolve Markets ──────────────────────────────
 
+    function updateAdminBadge(count) {
+        const tab = document.getElementById('adminTab');
+        if (!tab) return;
+        tab.textContent = count > 0 ? `Admin (${count})` : 'Admin';
+        tab.style.color = count > 0 ? 'var(--no)' : '';
+    }
+
     async function loadAdminMarkets() {
         const container = document.getElementById('adminMarketsContainer');
         try {
             const res = await fetch(`${API}/events`);
             const events = await res.json();
-            const openEvents = events.filter(e => e.status !== 'resolved');
 
-            if (openEvents.length === 0) {
+            // Sort: overdue first, then closed (within 24h window), then open
+            const statusOrder = { overdue: 0, closed: 1, open: 2 };
+            const pending = events
+                .filter(e => e.status !== 'resolved')
+                .sort((a, b) => (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3));
+
+            updateAdminBadge(pending.filter(e => e.status === 'closed' || e.status === 'overdue').length);
+
+            if (pending.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <h3>No hay mercados abiertos</h3>
+                        <h3>Sin mercados pendientes</h3>
                         <p>Todos los mercados han sido resueltos.</p>
                     </div>`;
                 return;
             }
 
-            const cards = openEvents.map(e => {
-                const closeDate = new Date(e.close_time).toLocaleDateString('es-CO', {
-                    day: 'numeric', month: 'short', year: 'numeric'
-                });
+            const cards = pending.map(e => {
+                const closeDate = e.close_time
+                    ? new Date(e.close_time).toLocaleDateString('es-CO', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })
+                    : '—';
+
+                let urgencyHtml = `<span style="color:var(--muted);">Abierto — resolución manual</span>`;
+                let borderColor = 'var(--border)';
+
+                if (e.status === 'overdue') {
+                    const closedAt = e.closed_at ? new Date(e.closed_at) : new Date(e.close_time);
+                    const hoursOver = Math.max(0, Math.floor((Date.now() - closedAt.getTime() - 24*3600*1000) / 3600000));
+                    urgencyHtml = `<span style="color:var(--no);font-weight:600;">⚠ VENCIDO — ${hoursOver}h sin resolución</span>`;
+                    borderColor = 'var(--no)';
+                } else if (e.status === 'closed') {
+                    const closedAt = e.closed_at ? new Date(e.closed_at) : new Date(e.close_time);
+                    const msLeft = (closedAt.getTime() + 24*3600*1000) - Date.now();
+                    const hLeft = Math.max(0, Math.floor(msLeft / 3600000));
+                    const mLeft = Math.max(0, Math.floor((msLeft % 3600000) / 60000));
+                    urgencyHtml = `<span style="color:var(--accent);">⏱ ${hLeft}h ${mLeft}m para resolución obligatoria</span>`;
+                    borderColor = 'var(--accent)';
+                }
+
                 return `
-                    <div style="background: var(--bg); border: 1px solid var(--border); padding: 1.25rem; margin-bottom: 0.75rem;">
-                        <div style="font-family: 'Syne', sans-serif; font-weight: 600; margin-bottom: 0.5rem;">${e.title}</div>
-                        <div style="font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--muted); margin-bottom: 1rem;">
-                            Cierre: ${closeDate} · ${e.resolution_source || 'Sin fuente'}
+                    <div style="background:var(--bg);border:1px solid ${borderColor};border-left:3px solid ${borderColor};padding:1.25rem;margin-bottom:0.75rem;">
+                        <div style="font-family:'Syne',sans-serif;font-weight:600;margin-bottom:0.4rem;">${e.title}</div>
+                        <div style="font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);margin-bottom:0.75rem;display:flex;gap:1.5rem;flex-wrap:wrap;">
+                            <span>Cierre: ${closeDate}</span>
+                            ${urgencyHtml}
+                            ${e.resolution_source ? `<span>Fuente: ${e.resolution_source}</span>` : ''}
                         </div>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <button class="btn-yes" onclick="resolveMarket(${e.id}, 'yes')">RESOLVER SÍ</button>
-                            <button class="btn-no" onclick="resolveMarket(${e.id}, 'no')">RESOLVER NO</button>
+                        <div style="display:flex;gap:0.5rem;">
+                            <button class="btn-yes" onclick="resolveMarket(${e.id},'yes')">RESOLVER SÍ</button>
+                            <button class="btn-no"  onclick="resolveMarket(${e.id},'no')">RESOLVER NO</button>
                         </div>
                     </div>`;
             }).join('');
@@ -2031,18 +2079,30 @@
         const closeDate = event.close_time
             ? new Date(event.close_time).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
             : '—';
+        const metaStatus = event.status === 'resolved' ? `✓ Resuelto: ${(event.outcome||'').toUpperCase()}`
+            : event.status === 'overdue' ? '⚠ Resolución vencida'
+            : event.status === 'closed'  ? '⏱ Pendiente resolución'
+            : 'Activo';
+        const metaStatusColor = event.status === 'overdue' ? 'var(--no)'
+            : event.status === 'closed' ? 'var(--accent)'
+            : event.status === 'resolved' ? 'var(--yes)' : 'var(--muted)';
         document.getElementById('detailMeta').innerHTML = `
             <span>Cierre: ${closeDate}</span>
             ${event.resolution_source ? `<span>Fuente: ${event.resolution_source}</span>` : ''}
-            <span>${event.status === 'resolved' ? `✓ Resuelto: ${(event.outcome||'').toUpperCase()}` : 'Activo'}</span>`;
+            <span style="color:${metaStatusColor};">${metaStatus}</span>`;
 
         const actionsEl = document.getElementById('detailActions');
-        if (event.status !== 'resolved') {
+        if (event.status === 'open') {
             actionsEl.innerHTML = `
                 <button class="btn-yes" style="flex:1;padding:0.65rem;" onclick="closeMarketDetail();openBetModal(${event.id},'yes')">SÍ — ${yp}¢</button>
                 <button class="btn-no"  style="flex:1;padding:0.65rem;" onclick="closeMarketDetail();openBetModal(${event.id},'no')">NO — ${np}¢</button>`;
         } else {
-            actionsEl.innerHTML = `<span style="font-family:'IBM Plex Mono',monospace;font-size:0.8rem;color:var(--muted);">Mercado cerrado</span>`;
+            const msg = event.status === 'overdue'  ? '⚠ Resolución vencida — sin nuevas posiciones'
+                      : event.status === 'closed'   ? '⏱ Mercado cerrado — pendiente resolución'
+                      : `Resuelto como: ${(event.outcome||'').toUpperCase()}`;
+            const col = event.status === 'overdue' ? 'var(--no)'
+                      : event.status === 'resolved' ? 'var(--yes)' : 'var(--accent)';
+            actionsEl.innerHTML = `<span style="font-family:'IBM Plex Mono',monospace;font-size:0.8rem;color:${col};">${msg}</span>`;
         }
 
         document.getElementById('marketDetailModal').classList.add('active');

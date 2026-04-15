@@ -335,7 +335,7 @@ app.post("/events/:id/resolve", authenticateToken, requireAdmin, async (req, res
 
     // Mark as resolved
     await pool.query(
-      "UPDATE events SET status = 'resolved', outcome = $1 WHERE id = $2",
+      "UPDATE events SET status = 'resolved', resolved = true, outcome = $1 WHERE id = $2",
       [result.toLowerCase(), eventId]
     );
 
@@ -767,6 +767,41 @@ app.get('/transactions/mine', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch transactions' });
   }
 });
+
+// ─── Resolution Scheduler ────────────────────────────────────
+//
+// Runs every 5 minutes (and once at startup):
+//   1. Auto-close events whose close_time has passed
+//   2. Escalate to 'overdue' if admin hasn't resolved within 24h
+
+async function runResolutionScheduler() {
+  try {
+    const closed = await pool.query(`
+      UPDATE events
+      SET status = 'closed', closed_at = NOW()
+      WHERE status = 'open'
+        AND close_time IS NOT NULL
+        AND close_time <= NOW()
+      RETURNING id, title`);
+    if (closed.rows.length > 0)
+      console.log(`[Scheduler] Auto-closed: ${closed.rows.map(r => r.title).join(', ')}`);
+
+    const overdue = await pool.query(`
+      UPDATE events
+      SET status = 'overdue'
+      WHERE status = 'closed'
+        AND closed_at IS NOT NULL
+        AND closed_at <= NOW() - INTERVAL '24 hours'
+      RETURNING id, title`);
+    if (overdue.rows.length > 0)
+      console.log(`[Scheduler] Overdue: ${overdue.rows.map(r => r.title).join(', ')}`);
+  } catch (err) {
+    console.error('[Scheduler] Error:', err.message);
+  }
+}
+
+runResolutionScheduler();
+setInterval(runResolutionScheduler, 5 * 60 * 1000);
 
 // ─── Serve Frontend ──────────────────────────────────────
 // ─── Stats ───────────────────────────────────────────────
