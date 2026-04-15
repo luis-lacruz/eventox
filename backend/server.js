@@ -598,41 +598,42 @@ app.get("/bets/mine", authenticateToken, async (req, res) => {
  */
 app.post("/credits/daily", authenticateToken, async (req, res) => {
   const BONUS_AMOUNT = 200;
-  const COOLDOWN_HOURS = 24;
+  const COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
   try {
     const userResult = await pool.query(
-      "SELECT credits, last_bonus_claim FROM users WHERE id = $1",
+      "SELECT credits, last_daily_bonus FROM users WHERE id = $1",
       [req.user.id]
     );
     const user = userResult.rows[0];
 
-    // Check if 24 hours have passed since last claim
-    if (user.last_bonus_claim) {
-      const hoursSinceClaim = (Date.now() - new Date(user.last_bonus_claim).getTime()) / (1000 * 60 * 60);
-      if (hoursSinceClaim < COOLDOWN_HOURS) {
-        const hoursLeft = Math.ceil(COOLDOWN_HOURS - hoursSinceClaim);
+    if (user.last_daily_bonus) {
+      const msSinceClaim = Date.now() - new Date(user.last_daily_bonus).getTime();
+      if (msSinceClaim < COOLDOWN_MS) {
+        const msLeft = COOLDOWN_MS - msSinceClaim;
+        const hoursLeft = Math.floor(msLeft / (1000 * 60 * 60));
+        const minutesLeft = Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60));
         return res.status(429).json({
-          error: `Bonus ya reclamado. Vuelve en ${hoursLeft} hora${hoursLeft === 1 ? '' : 's'}.`,
-          next_claim_in_hours: hoursLeft
+          error: "already_claimed",
+          hours_left: hoursLeft,
+          minutes_left: minutesLeft,
         });
       }
     }
 
-    // Award bonus
     const result = await pool.query(
-      "UPDATE users SET credits = credits + $1, last_bonus_claim = NOW() WHERE id = $2 RETURNING credits",
+      "UPDATE users SET credits = credits + $1, last_daily_bonus = NOW() WHERE id = $2 RETURNING credits",
       [BONUS_AMOUNT, req.user.id]
     );
 
     res.json({
       message: `¡${BONUS_AMOUNT} créditos reclamados!`,
       credits: result.rows[0].credits,
-      bonus: BONUS_AMOUNT
+      bonus: BONUS_AMOUNT,
     });
   } catch (err) {
     console.error("Daily bonus error:", err.message);
-    res.status(500).json({ error: "Failed to claim bonus." });
+    res.status(500).json({ error: "server_error" });
   }
 });
 

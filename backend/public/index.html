@@ -1004,6 +1004,7 @@
 <script>
     // ─── Config ──────────────────────────────────────────────
     const API = window.location.origin;
+    const SUPPORT_EMAIL = 'soporte@eventox.co';
 
     // ─── Auth State ──────────────────────────────────────────
     let authToken = localStorage.getItem('eventox_token');
@@ -1738,11 +1739,24 @@
 
     // ─── Toast ───────────────────────────────────────────────
 
-    function showToast(msg, isError = false) {
+    function showToast(msg, isError = false, { html = false, duration = 3000 } = {}) {
         const toast = document.getElementById('toast');
-        toast.textContent = msg;
+        if (html) toast.innerHTML = msg;
+        else toast.textContent = msg;
         toast.className = `toast${isError ? ' error' : ''} show`;
-        setTimeout(() => toast.classList.remove('show'), 3000);
+        clearTimeout(toast._timeout);
+        toast._timeout = setTimeout(() => toast.classList.remove('show'), duration);
+    }
+
+    function _setBonusBtn(text, disabled) {
+        document.querySelectorAll('#headerRight button').forEach(btn => {
+            if (btn.textContent.trim().startsWith('BONO')) {
+                btn.textContent = text;
+                btn.disabled = disabled;
+                btn.style.opacity = disabled ? '0.45' : '';
+                btn.style.cursor = disabled ? 'not-allowed' : '';
+            }
+        });
     }
 
     // ─── Admin: Resolve Markets ──────────────────────────────
@@ -1826,16 +1840,34 @@
             });
             const data = await res.json();
 
+            if (res.status === 429 && data.error === 'already_claimed') {
+                const h = data.hours_left;
+                const m = data.minutes_left;
+                const timeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+                _setBonusBtn(`BONO EN ${h > 0 ? h + 'H' : m + 'M'}`, true);
+                showToast(`Bono ya reclamado. Disponible en ${timeStr}.`, true, { duration: 5000 });
+                return;
+            }
+
             if (!res.ok) {
-                showToast(data.error, true);
+                showToast(
+                    `Error inesperado. Si persiste, <a href="mailto:${SUPPORT_EMAIL}" style="color:var(--accent);text-decoration:underline;">contactar soporte</a>.`,
+                    true,
+                    { html: true, duration: 8000 }
+                );
                 return;
             }
 
             currentUser.credits = data.credits;
             document.getElementById('userCredits').textContent = data.credits.toLocaleString();
+            _setBonusBtn('BONO EN 24H', true);
             showToast(data.message);
         } catch (err) {
-            showToast('Error reclamando bono.', true);
+            showToast(
+                `Sin conexión. Si persiste, <a href="mailto:${SUPPORT_EMAIL}" style="color:var(--accent);text-decoration:underline;">contactar soporte</a>.`,
+                true,
+                { html: true, duration: 8000 }
+            );
         }
     }
 
