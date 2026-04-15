@@ -726,19 +726,24 @@
             border-color: var(--accent);
             color: var(--accent);
         }
-        /* PRICE CHART */
-        .market-chart-wrap {
-            height: 56px;
-            width: 100%;
-            margin: 0.5rem 0;
+        /* MARKET DETAIL CHART */
+        .detail-chart-wrap {
             position: relative;
+            height: 190px;
+            margin-bottom: 1.25rem;
+            background: var(--bg3);
+            border: 1px solid var(--border);
             overflow: hidden;
         }
-        .market-chart-wrap canvas {
-            display: block;
-            width: 100% !important;
-            height: 100% !important;
-            pointer-events: none;
+        .detail-chart-empty {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--muted);
         }
         /* HISTORY TABLE */
         .history-table {
@@ -1060,6 +1065,32 @@
     </div>
 </div>
 
+<!-- MARKET DETAIL MODAL -->
+<div class="modal-overlay" id="marketDetailModal">
+    <div class="modal" style="max-width:640px;width:95%;max-height:90vh;overflow-y:auto;">
+        <div class="modal-title">
+            <span id="detailTag" style="font-family:'IBM Plex Mono',monospace;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent);background:rgba(232,255,71,0.08);padding:0.2rem 0.5rem;"></span>
+            <button class="modal-close" onclick="closeMarketDetail()">✕</button>
+        </div>
+        <div id="detailTitle" style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.1rem;line-height:1.35;margin-bottom:0.75rem;"></div>
+        <div id="detailDesc" style="font-size:0.85rem;color:var(--muted);line-height:1.5;margin-bottom:1.25rem;"></div>
+        <div class="price-bar-container" style="margin-bottom:1.5rem;">
+            <div class="price-bar"><div class="price-bar-fill" id="detailBarFill"></div></div>
+            <div class="price-labels">
+                <span class="yes-label" id="detailYesLbl"></span>
+                <span class="no-label" id="detailNoLbl"></span>
+            </div>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:0.4rem;">Historial de precio — SÍ %</div>
+        <div class="detail-chart-wrap" id="detailChartWrap">
+            <canvas id="detailChart"></canvas>
+            <div class="detail-chart-empty" id="detailChartEmpty" style="display:none;">Sin historial de precios aún</div>
+        </div>
+        <div id="detailMeta" style="display:flex;gap:1.5rem;flex-wrap:wrap;font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);margin-bottom:1.5rem;padding-top:0.25rem;"></div>
+        <div id="detailActions" style="display:flex;gap:0.75rem;"></div>
+    </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -1366,7 +1397,7 @@
                        <div class="market-tag">${event.resolution_source || 'Contrato Binario'}</div>
                    </div>`;
             return `
-                <div class="market-card">
+                <div class="market-card" onclick="openMarketDetail(${event.id})">
                     ${imageHtml}
                     <div class="market-title">${event.title}</div>
                     <div class="price-bar-container">
@@ -1378,21 +1409,19 @@
                             <span class="no-label">NO ${event.no_price || 50}¢</span>
                         </div>
                     </div>
-                    <div class="market-chart-wrap"><canvas id="chart-${event.id}"></canvas></div>
                     <div class="market-footer">
                         <div class="market-meta">
                             <span>Cierre: ${closeDate}</span>
                             <span>${event.resolved ? '✓ Resuelto' : 'Activo'}</span>
                         </div>
                         <div class="bet-buttons">
-                            <button class="btn-yes" onclick="openBetModal(${event.id}, 'yes')">SÍ</button>
-                            <button class="btn-no" onclick="openBetModal(${event.id}, 'no')">NO</button>
+                            <button class="btn-yes" onclick="event.stopPropagation();openBetModal(${event.id}, 'yes')">SÍ</button>
+                            <button class="btn-no" onclick="event.stopPropagation();openBetModal(${event.id}, 'no')">NO</button>
                         </div>
                     </div>
                 </div>`;
         }).join('');
         container.innerHTML = `<div class="markets-grid">${cards}</div>`;
-        loadPriceHistories(events);
     }
     function filterMarkets(filter, btn) {
         currentFilter = filter;
@@ -1795,7 +1824,10 @@
 
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) overlay.classList.remove('active');
+            if (e.target === overlay) {
+                if (overlay.id === 'marketDetailModal') closeMarketDetail();
+                else overlay.classList.remove('active');
+            }
         });
     });
 
@@ -1967,6 +1999,142 @@
             document.getElementById('giftUsername').value = '';
         } catch (err) {
             showToast('Error enviando créditos.', true);
+        }
+    }
+
+    // ─── Market Detail Modal ─────────────────────────────────
+
+    let _detailChart = null;
+
+    function closeMarketDetail() {
+        document.getElementById('marketDetailModal').classList.remove('active');
+        if (_detailChart) { _detailChart.destroy(); _detailChart = null; }
+    }
+
+    async function openMarketDetail(eventId) {
+        const event = allEvents.find(e => e.id === eventId);
+        if (!event) return;
+
+        document.getElementById('detailTag').textContent = event.resolution_source || event.category || 'Contrato Binario';
+        document.getElementById('detailTitle').textContent = event.title;
+
+        const descEl = document.getElementById('detailDesc');
+        descEl.textContent = event.description || '';
+        descEl.style.display = event.description ? '' : 'none';
+
+        const yp = event.yes_price || 50;
+        const np = event.no_price || 50;
+        document.getElementById('detailBarFill').style.width = `${yp}%`;
+        document.getElementById('detailYesLbl').textContent = `SÍ ${yp}¢`;
+        document.getElementById('detailNoLbl').textContent = `NO ${np}¢`;
+
+        const closeDate = event.close_time
+            ? new Date(event.close_time).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
+            : '—';
+        document.getElementById('detailMeta').innerHTML = `
+            <span>Cierre: ${closeDate}</span>
+            ${event.resolution_source ? `<span>Fuente: ${event.resolution_source}</span>` : ''}
+            <span>${event.status === 'resolved' ? `✓ Resuelto: ${(event.outcome||'').toUpperCase()}` : 'Activo'}</span>`;
+
+        const actionsEl = document.getElementById('detailActions');
+        if (event.status !== 'resolved') {
+            actionsEl.innerHTML = `
+                <button class="btn-yes" style="flex:1;padding:0.65rem;" onclick="closeMarketDetail();openBetModal(${event.id},'yes')">SÍ — ${yp}¢</button>
+                <button class="btn-no"  style="flex:1;padding:0.65rem;" onclick="closeMarketDetail();openBetModal(${event.id},'no')">NO — ${np}¢</button>`;
+        } else {
+            actionsEl.innerHTML = `<span style="font-family:'IBM Plex Mono',monospace;font-size:0.8rem;color:var(--muted);">Mercado cerrado</span>`;
+        }
+
+        document.getElementById('marketDetailModal').classList.add('active');
+        await loadDetailChart(eventId);
+    }
+
+    async function loadDetailChart(eventId) {
+        if (typeof Chart === 'undefined') return;
+        const canvas  = document.getElementById('detailChart');
+        const emptyEl = document.getElementById('detailChartEmpty');
+        if (_detailChart) { _detailChart.destroy(); _detailChart = null; }
+        canvas.style.display = 'block';
+        emptyEl.style.display = 'none';
+
+        try {
+            const res = await fetch(`${API}/events/${eventId}/price-history`);
+            if (!res.ok) throw new Error('fetch failed');
+            const history = await res.json();
+            if (!Array.isArray(history) || history.length < 2) {
+                canvas.style.display = 'none';
+                emptyEl.style.display = 'flex';
+                return;
+            }
+            const labels = history.map(h =>
+                new Date(h.recorded_at).toLocaleDateString('es-CO', {
+                    day: 'numeric', month: 'short',
+                    hour: '2-digit', minute: '2-digit'
+                })
+            );
+            _detailChart = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'SÍ %',
+                        data: history.map(h => h.yes_price),
+                        borderColor: '#e8ff47',
+                        borderWidth: 2,
+                        fill: true,
+                        backgroundColor: 'rgba(232,255,71,0.07)',
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 250 },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            enabled: true,
+                            backgroundColor: '#1a1a1f',
+                            borderColor: '#1f1f2a',
+                            borderWidth: 1,
+                            titleColor: '#6b6b85',
+                            bodyColor: '#e8ff47',
+                            titleFont: { family: "'IBM Plex Mono', monospace", size: 10 },
+                            bodyFont:  { family: "'IBM Plex Mono', monospace", size: 12, weight: '600' },
+                            callbacks: { label: ctx => ` SÍ ${ctx.parsed.y}¢` }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            grid: { color: '#1f1f2a', drawBorder: false },
+                            ticks: {
+                                color: '#6b6b85',
+                                font: { family: "'IBM Plex Mono', monospace", size: 9 },
+                                maxTicksLimit: 5,
+                                maxRotation: 0
+                            }
+                        },
+                        y: {
+                            display: true,
+                            min: 0, max: 100,
+                            position: 'right',
+                            grid: { color: '#1f1f2a', drawBorder: false },
+                            ticks: {
+                                color: '#6b6b85',
+                                font: { family: "'IBM Plex Mono', monospace", size: 9 },
+                                maxTicksLimit: 5,
+                                callback: v => v + '¢'
+                            }
+                        }
+                    }
+                }
+            });
+        } catch (err) {
+            canvas.style.display = 'none';
+            emptyEl.style.display = 'flex';
         }
     }
 
