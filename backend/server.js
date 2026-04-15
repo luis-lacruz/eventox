@@ -285,8 +285,8 @@ app.post("/events", authenticateToken, requireAdmin, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO events (title, description, category, resolution_source, close_time)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO events (title, description, category, resolution_source, close_time, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [
         title,
@@ -294,7 +294,7 @@ app.post("/events", authenticateToken, requireAdmin, async (req, res) => {
         category || "politics",
         resolution_source || null,
         close_time || null,
-        image_url || null, 
+        image_url || null,
       ]
     );
     res.status(201).json(result.rows[0]);

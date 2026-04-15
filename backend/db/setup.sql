@@ -21,6 +21,7 @@ CREATE TABLE events (
   resolved_as TEXT CHECK (resolved_as IN ('yes', 'no')),
   resolution_source TEXT,
   close_time TIMESTAMP,
+  image_url TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 

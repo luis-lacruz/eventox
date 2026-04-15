@@ -1367,7 +1367,9 @@
         const container = document.getElementById('positionsContainer');
         try {
             const res = await fetch(`${API}/bets/mine`, { headers: authHeaders() });
+            if (!res.ok) throw new Error(`Server error ${res.status}`);
             const positions = await res.json();
+            if (!Array.isArray(positions)) throw new Error('Unexpected response format');
 
             if (positions.length === 0) {
                 container.innerHTML = `
