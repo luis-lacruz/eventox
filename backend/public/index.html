@@ -1573,34 +1573,35 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
                     </div>
                 </div>`;
 
-            // ── Rows ───────────────────────────────────────────────
-            const rows = positions.map(p => {
+            // ── Split open / closed ────────────────────────────────
+            const openPositions   = positions.filter(p => p.status !== 'CLOSED');
+            const closedPositions = positions.filter(p => p.status === 'CLOSED');
+
+            const buildRow = (p, showAction) => {
                 const ep = p.entry_price || 50;
                 const posClass = p.position === 'yes' ? 'pos-yes' : 'pos-no';
                 const posLabel = p.position === 'yes' ? 'SÍ' : 'NO';
-                const isClosed = p.status === 'CLOSED';
-
                 let pnlCell, actionCell, currentPriceCell;
 
-                if (isClosed) {
+                if (!showAction) {
                     const pnl = p.pnl || 0;
                     pnlCell = `<span class="${pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}">${fmt(pnl)}</span>`;
-                    currentPriceCell = `<span class="status-badge">CERRADO</span>`;
-                    actionCell = `—`;
+                    currentPriceCell = `—`;
+                    actionCell = '';
                 } else {
                     const currentPrice = p.position === 'yes' ? (p.yes_price || 50) : (p.no_price || 50);
                     const currentValue = Math.round(p.amount * currentPrice / ep);
                     const pnl = currentValue - p.amount;
                     pnlCell = `<span class="${pnl >= 0 ? 'pnl-pos' : pnl < 0 ? 'pnl-neg' : 'pnl-zero'}">${fmt(pnl)}</span>`;
                     currentPriceCell = `${currentPrice}¢`;
-                    actionCell = `<button class="btn-sell"
+                    actionCell = `<td><button class="btn-sell"
                         data-id="${p.id}"
                         data-amount="${p.amount}"
                         data-entry="${ep}"
                         data-current="${currentPrice}"
                         data-side="${p.position}"
                         data-title="${p.event_title.replace(/"/g, '&quot;')}"
-                        onclick="openSellModalFromBtn(this)">VENDER</button>`;
+                        onclick="openSellModalFromBtn(this)">VENDER</button></td>`;
                 }
 
                 return `
@@ -1611,26 +1612,36 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
                         <td>${ep}¢</td>
                         <td>${currentPriceCell}</td>
                         <td>${pnlCell}</td>
-                        <td>${actionCell}</td>
+                        ${actionCell}
                     </tr>`;
-            }).join('');
+            };
+
+            const openTable = openPositions.length === 0
+                ? `<p style="color:var(--text-muted); margin:0.5rem 0 1.5rem;">Sin posiciones abiertas.</p>`
+                : `<table class="positions-table">
+                    <thead><tr>
+                        <th>Mercado</th><th>Pos</th><th>Invertido</th>
+                        <th>Entrada</th><th>Actual</th><th>PnL</th><th>Acción</th>
+                    </tr></thead>
+                    <tbody>${openPositions.map(p => buildRow(p, true)).join('')}</tbody>
+                   </table>`;
+
+            const closedTable = closedPositions.length === 0
+                ? `<p style="color:var(--text-muted); margin:0.5rem 0 1.5rem;">Sin posiciones cerradas.</p>`
+                : `<table class="positions-table">
+                    <thead><tr>
+                        <th>Mercado</th><th>Pos</th><th>Invertido</th>
+                        <th>Entrada</th><th>Precio Final</th><th>PnL</th>
+                    </tr></thead>
+                    <tbody>${closedPositions.map(p => buildRow(p, false)).join('')}</tbody>
+                   </table>`;
 
             container.innerHTML = `
                 ${statsHtml}
-                <table class="positions-table">
-                    <thead>
-                        <tr>
-                            <th>Mercado</th>
-                            <th>Pos</th>
-                            <th>Invertido</th>
-                            <th>Entrada</th>
-                            <th>Actual</th>
-                            <th>PnL</th>
-                            <th>Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>`;
+                <h3 style="margin:0 0 0.75rem; font-size:1rem; color:var(--accent);">Posiciones Abiertas</h3>
+                ${openTable}
+                <h3 style="margin:1.5rem 0 0.75rem; font-size:1rem; color:var(--text-muted);">Posiciones Cerradas</h3>
+                ${closedTable}`;
         } catch (err) {
             console.error('loadPositions error:', err);
             container.innerHTML = `
