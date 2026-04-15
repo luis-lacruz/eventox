@@ -359,15 +359,25 @@ app.post("/events/:id/resolve", authenticateToken, requireAdmin, async (req, res
         "UPDATE bets SET status = 'CLOSED', pnl = $1 WHERE id = $2",
         [pnl, bet.id]
       );
+      logTransaction(bet.user_id, parseInt(eventId), 'winnings', payout,
+        `Ganancia en "${eventResult.rows[0].title}" (${result.toUpperCase()})`);
       totalPaid += payout;
     }
 
     // Close losing open positions (no payout, record negative pnl)
+    const losingBets = await pool.query(
+      `SELECT user_id, amount FROM bets WHERE event_id = $1 AND position != $2 AND status = 'OPEN'`,
+      [eventId, result.toLowerCase()]
+    );
     await pool.query(
       `UPDATE bets SET status = 'CLOSED', pnl = -amount
        WHERE event_id = $1 AND position != $2 AND status = 'OPEN'`,
       [eventId, result.toLowerCase()]
     );
+    for (const lb of losingBets.rows) {
+      logTransaction(lb.user_id, parseInt(eventId), 'loss', lb.amount,
+        `Pérdida en "${eventResult.rows[0].title}" (${result.toUpperCase()})`);
+    }
 
     res.json({
       message: `Mercado resuelto como ${result.toUpperCase()}.`,
@@ -383,6 +393,30 @@ app.post("/events/:id/resolve", authenticateToken, requireAdmin, async (req, res
 
 
 // ─── Positions (Bets) ───────────────────────────────────────
+
+// ─── Helpers: Price History & Transaction Log ────────────────
+
+async function recordPriceHistory(eventId, yesPrice, noPrice) {
+  try {
+    await pool.query(
+      'INSERT INTO price_history (event_id, yes_price, no_price) VALUES ($1, $2, $3)',
+      [eventId, yesPrice, noPrice]
+    );
+  } catch (err) {
+    console.error('recordPriceHistory error:', err.message);
+  }
+}
+
+async function logTransaction(userId, eventId, type, amount, description) {
+  try {
+    await pool.query(
+      'INSERT INTO transactions (user_id, event_id, type, amount, description) VALUES ($1, $2, $3, $4, $5)',
+      [userId, eventId, type, amount, description]
+    );
+  } catch (err) {
+    console.error('logTransaction error:', err.message);
+  }
+}
 
 /**
  * Helper: update market prices after a buy or sell.
@@ -400,6 +434,7 @@ async function updatePrices(eventId, side, amount, isBuy) {
     "UPDATE events SET yes_price = $1, no_price = $2 WHERE id = $3",
     [newYes, 100 - newYes, eventId]
   );
+  recordPriceHistory(eventId, newYes, 100 - newYes);
 }
 
 /**
@@ -465,6 +500,8 @@ app.post("/bets", authenticateToken, async (req, res) => {
 
     // Move market price
     await updatePrices(event_id, position.toLowerCase(), betAmount, true);
+    logTransaction(req.user.id, event_id, 'bet_placed', betAmount,
+      `${position.toUpperCase()} en "${event.title}" a ${entryPrice}¢`);
 
     // Return bet plus updated prices so the frontend can refresh immediately
     const updatedEvent = await pool.query(
@@ -511,7 +548,7 @@ app.post("/bets/:id/sell", authenticateToken, async (req, res) => {
     }
 
     const eventResult = await pool.query(
-      "SELECT yes_price, no_price FROM events WHERE id = $1", [bet.event_id]
+      "SELECT yes_price, no_price, title FROM events WHERE id = $1", [bet.event_id]
     );
     const event = eventResult.rows[0];
     const currentPrice = bet.position === "yes" ? event.yes_price : event.no_price;
@@ -545,6 +582,8 @@ app.post("/bets/:id/sell", authenticateToken, async (req, res) => {
 
     // Move market price back (selling = inverse direction of buying)
     await updatePrices(bet.event_id, bet.position, sellAmount, false);
+    logTransaction(req.user.id, bet.event_id, 'sell', creditsOut,
+      `Venta ${bet.position.toUpperCase()} en "${event.title}" (PnL: ${pnlDelta >= 0 ? '+' : ''}${pnlDelta})`);
 
     const userResult = await pool.query(
       "SELECT credits FROM users WHERE id = $1", [req.user.id]
@@ -689,6 +728,43 @@ app.get("/leaderboard", async (req, res) => {
   } catch (err) {
     console.error("Error fetching leaderboard:", err.message);
     res.status(500).json({ error: "Failed to fetch leaderboard" });
+  }
+});
+
+// ─── Price History ───────────────────────────────────────────
+
+app.get('/events/:id/price-history', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT yes_price, no_price, recorded_at FROM price_history
+       WHERE event_id = $1 ORDER BY recorded_at ASC LIMIT 100`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('price-history error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch price history' });
+  }
+});
+
+// ─── Transaction History ─────────────────────────────────────
+
+app.get('/transactions/mine', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT t.id, t.type, t.amount, t.description, t.created_at,
+              e.title AS event_title
+       FROM transactions t
+       LEFT JOIN events e ON t.event_id = e.id
+       WHERE t.user_id = $1
+       ORDER BY t.created_at DESC
+       LIMIT 50`,
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('transactions/mine error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch transactions' });
   }
 });
 
