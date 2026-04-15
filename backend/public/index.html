@@ -1527,7 +1527,14 @@
                     const pnl = currentValue - p.amount;
                     pnlCell = `<span class="${pnl >= 0 ? 'pnl-pos' : pnl < 0 ? 'pnl-neg' : 'pnl-zero'}">${fmt(pnl)}</span>`;
                     currentPriceCell = `${currentPrice}¢`;
-                    actionCell = `<button class="btn-sell" onclick="openSellModal(${p.id}, ${p.amount}, ${ep}, ${currentPrice}, '${p.position}', ${JSON.stringify(p.event_title)})">VENDER</button>`;
+                    actionCell = `<button class="btn-sell"
+                        data-id="${p.id}"
+                        data-amount="${p.amount}"
+                        data-entry="${ep}"
+                        data-current="${currentPrice}"
+                        data-side="${p.position}"
+                        data-title="${p.event_title.replace(/"/g, '&quot;')}"
+                        onclick="openSellModalFromBtn(this)">VENDER</button>`;
                 }
 
                 return `
@@ -1571,6 +1578,17 @@
     // ─── Sell Position ───────────────────────────────────────
 
     let _sellBetId = null;
+
+    function openSellModalFromBtn(btn) {
+        openSellModal(
+            parseInt(btn.dataset.id),
+            parseInt(btn.dataset.amount),
+            parseInt(btn.dataset.entry),
+            parseInt(btn.dataset.current),
+            btn.dataset.side,
+            btn.dataset.title
+        );
+    }
 
     function openSellModal(betId, amount, entryPrice, currentPrice, side, eventTitle) {
         _sellBetId = betId;
