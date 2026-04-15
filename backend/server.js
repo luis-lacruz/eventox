@@ -335,7 +335,7 @@ app.post("/events/:id/resolve", authenticateToken, requireAdmin, async (req, res
 
     // Mark as resolved
     await pool.query(
-      "UPDATE events SET status = 'resolved', resolved_as = $1 WHERE id = $2",
+      "UPDATE events SET status = 'resolved', outcome = $1 WHERE id = $2",
       [result.toLowerCase(), eventId]
     );
 
@@ -439,7 +439,7 @@ app.post("/bets", authenticateToken, async (req, res) => {
 app.get("/bets/mine", authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT b.*, e.title AS event_title, e.status AS event_status, e.resolved_as
+      `SELECT b.*, e.title AS event_title, e.status AS event_status, e.outcome AS resolved_as
        FROM bets b
        JOIN events e ON b.event_id = e.id
        WHERE b.user_id = $1
