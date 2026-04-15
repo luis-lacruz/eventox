@@ -34,5 +34,8 @@ CREATE TABLE bets (
   user_id INTEGER REFERENCES users(id),
   position TEXT NOT NULL CHECK (position IN ('yes', 'no')),
   amount INTEGER NOT NULL DEFAULT 100,
+  entry_price INTEGER NOT NULL DEFAULT 50,  -- market price (¢) at time of purchase
+  status TEXT NOT NULL DEFAULT 'OPEN',      -- OPEN | CLOSED
+  pnl INTEGER NOT NULL DEFAULT 0,           -- realised profit/loss in credits (set on close)
   created_at TIMESTAMP DEFAULT NOW()
 );

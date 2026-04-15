@@ -339,26 +339,40 @@ app.post("/events/:id/resolve", authenticateToken, requireAdmin, async (req, res
       [result.toLowerCase(), eventId]
     );
 
-    // Find winning bets and pay out 2x their stake
+    // Pay out winning open positions (entry-price aware: payout = amount × 100 / entry_price)
     const winningBets = await pool.query(
-      "SELECT user_id, amount FROM bets WHERE event_id = $1 AND position = $2",
+      `SELECT id, user_id, amount, entry_price
+       FROM bets WHERE event_id = $1 AND position = $2 AND status = 'OPEN'`,
       [eventId, result.toLowerCase()]
     );
 
     let totalPaid = 0;
     for (const bet of winningBets.rows) {
-      const payout = bet.amount * 2;
+      const ep = bet.entry_price || 50;
+      const payout = Math.round(bet.amount * 100 / ep); // at ep=50 this is 2× as before
+      const pnl = payout - bet.amount;
       await pool.query(
         "UPDATE users SET credits = credits + $1 WHERE id = $2",
         [payout, bet.user_id]
       );
+      await pool.query(
+        "UPDATE bets SET status = 'CLOSED', pnl = $1 WHERE id = $2",
+        [pnl, bet.id]
+      );
       totalPaid += payout;
     }
+
+    // Close losing open positions (no payout, record negative pnl)
+    await pool.query(
+      `UPDATE bets SET status = 'CLOSED', pnl = -amount
+       WHERE event_id = $1 AND position != $2 AND status = 'OPEN'`,
+      [eventId, result.toLowerCase()]
+    );
 
     res.json({
       message: `Mercado resuelto como ${result.toUpperCase()}.`,
       winners: winningBets.rows.length,
-      total_paid: totalPaid
+      total_paid: totalPaid,
     });
   } catch (err) {
     console.error("Resolve market error:", err.message);
@@ -371,15 +385,27 @@ app.post("/events/:id/resolve", authenticateToken, requireAdmin, async (req, res
 // ─── Positions (Bets) ───────────────────────────────────────
 
 /**
+ * Helper: update market prices after a buy or sell.
+ * Buying YES (or selling NO) pushes yes_price up.
+ * Buying NO (or selling YES) pushes yes_price down.
+ * Impact: 1¢ per 100 credits. yes_price + no_price always = 100.
+ */
+async function updatePrices(eventId, side, amount, isBuy) {
+  const impact = Math.max(1, Math.floor(amount / 100));
+  const direction = (side === "yes") === isBuy ? 1 : -1;
+  const evRes = await pool.query("SELECT yes_price FROM events WHERE id = $1", [eventId]);
+  if (evRes.rows.length === 0) return;
+  const newYes = Math.max(1, Math.min(99, evRes.rows[0].yes_price + impact * direction));
+  await pool.query(
+    "UPDATE events SET yes_price = $1, no_price = $2 WHERE id = $3",
+    [newYes, 100 - newYes, eventId]
+  );
+}
+
+/**
  * POST /bets
- * Place a YES or NO position on a market. Requires login.
+ * Buy a YES or NO position. Records entry price and moves market price.
  * Body: { event_id, position: "yes"|"no", amount? }
- *
- * Flow:
- * 1. Verify user is logged in (authenticateToken)
- * 2. Check user has enough credits
- * 3. Deduct credits from user
- * 4. Record the position
  */
 app.post("/bets", authenticateToken, async (req, res) => {
   const { event_id, position, amount } = req.body;
@@ -394,12 +420,25 @@ app.post("/bets", authenticateToken, async (req, res) => {
   }
 
   try {
+    // Get event to verify it's open and read current price
+    const eventResult = await pool.query("SELECT * FROM events WHERE id = $1", [event_id]);
+    if (eventResult.rows.length === 0) {
+      return res.status(404).json({ error: "Market not found." });
+    }
+    const event = eventResult.rows[0];
+    if (event.status !== "open") {
+      return res.status(400).json({ error: "Market is closed." });
+    }
+
+    const entryPrice = position.toLowerCase() === "yes"
+      ? (event.yes_price || 50)
+      : (event.no_price || 50);
+
     // Check user's current credits
     const userResult = await pool.query(
       "SELECT credits FROM users WHERE id = $1",
       [req.user.id]
     );
-
     const userCredits = userResult.rows[0].credits;
 
     if (userCredits < betAmount) {
@@ -416,15 +455,26 @@ app.post("/bets", authenticateToken, async (req, res) => {
       [betAmount, req.user.id]
     );
 
-    // Record the position with the user_id
+    // Record the position with entry price
     const result = await pool.query(
-      `INSERT INTO bets (event_id, user_id, position, amount)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO bets (event_id, user_id, position, amount, entry_price, status)
+       VALUES ($1, $2, $3, $4, $5, 'OPEN')
        RETURNING *`,
-      [event_id, req.user.id, position.toLowerCase(), betAmount]
+      [event_id, req.user.id, position.toLowerCase(), betAmount, entryPrice]
     );
 
-    res.status(201).json(result.rows[0]);
+    // Move market price
+    await updatePrices(event_id, position.toLowerCase(), betAmount, true);
+
+    // Return bet plus updated prices so the frontend can refresh immediately
+    const updatedEvent = await pool.query(
+      "SELECT yes_price, no_price FROM events WHERE id = $1", [event_id]
+    );
+    res.status(201).json({
+      ...result.rows[0],
+      yes_price: updatedEvent.rows[0].yes_price,
+      no_price: updatedEvent.rows[0].no_price,
+    });
   } catch (err) {
     console.error("Error placing bet:", err.message);
     res.status(500).json({ error: "Failed to place position" });
@@ -432,14 +482,101 @@ app.post("/bets", authenticateToken, async (req, res) => {
 });
 
 /**
+ * POST /bets/:id/sell
+ * Sell all or part of an open position before market resolution.
+ * Body: { sell_amount? }  — omit to sell the full position.
+ *
+ * Return = sell_amount × current_price / entry_price
+ * PnL    = return − sell_amount
+ */
+app.post("/bets/:id/sell", authenticateToken, async (req, res) => {
+  const betId = req.params.id;
+  const { sell_amount } = req.body;
+
+  try {
+    const betResult = await pool.query("SELECT * FROM bets WHERE id = $1", [betId]);
+    if (betResult.rows.length === 0) {
+      return res.status(404).json({ error: "Position not found." });
+    }
+    const bet = betResult.rows[0];
+
+    if (bet.user_id !== req.user.id) {
+      return res.status(403).json({ error: "Not your position." });
+    }
+    if (bet.status !== "OPEN") {
+      return res.status(400).json({ error: "Position already closed." });
+    }
+    if (bet.amount <= 0) {
+      return res.status(400).json({ error: "Nothing left to sell." });
+    }
+
+    const eventResult = await pool.query(
+      "SELECT yes_price, no_price FROM events WHERE id = $1", [bet.event_id]
+    );
+    const event = eventResult.rows[0];
+    const currentPrice = bet.position === "yes" ? event.yes_price : event.no_price;
+    const entryPrice = bet.entry_price || 50;
+
+    // Clamp sell_amount to what the user actually owns
+    const sellAmount = sell_amount && parseInt(sell_amount) < bet.amount
+      ? parseInt(sell_amount)
+      : bet.amount;
+
+    // Credits returned at current price
+    const creditsOut = Math.round(sellAmount * currentPrice / entryPrice);
+    const pnlDelta = creditsOut - sellAmount;
+
+    // Pay user
+    await pool.query(
+      "UPDATE users SET credits = credits + $1 WHERE id = $2",
+      [creditsOut, req.user.id]
+    );
+
+    // Update the bet
+    const newAmount = bet.amount - sellAmount;
+    if (newAmount <= 0) {
+      await pool.query(
+        "UPDATE bets SET amount = 0, status = 'CLOSED', pnl = $1 WHERE id = $2",
+        [pnlDelta, betId]
+      );
+    } else {
+      await pool.query("UPDATE bets SET amount = $1 WHERE id = $2", [newAmount, betId]);
+    }
+
+    // Move market price back (selling = inverse direction of buying)
+    await updatePrices(bet.event_id, bet.position, sellAmount, false);
+
+    const userResult = await pool.query(
+      "SELECT credits FROM users WHERE id = $1", [req.user.id]
+    );
+
+    res.json({
+      pnl: pnlDelta,
+      credits_out: creditsOut,
+      new_credits: userResult.rows[0].credits,
+      position_status: newAmount <= 0 ? "CLOSED" : "OPEN",
+      remaining_amount: Math.max(0, newAmount),
+    });
+  } catch (err) {
+    console.error("Sell position error:", err.message);
+    res.status(500).json({ error: "Failed to sell position." });
+  }
+});
+
+/**
  * GET /bets/mine
- * Returns all positions for the currently logged-in user.
- * Joins with events table to show market titles.
+ * Returns all positions for the logged-in user, including live market prices
+ * so the frontend can compute current value and unrealised PnL.
  */
 app.get("/bets/mine", authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT b.*, e.title AS event_title, e.status AS event_status, e.outcome AS resolved_as
+      `SELECT b.*,
+              e.title AS event_title,
+              e.status AS event_status,
+              e.outcome AS resolved_as,
+              e.yes_price,
+              e.no_price
        FROM bets b
        JOIN events e ON b.event_id = e.id
        WHERE b.user_id = $1

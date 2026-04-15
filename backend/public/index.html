@@ -431,6 +431,59 @@
         .pos-no { color: var(--no); font-weight: 500; }
         .pos-status-open { color: var(--accent); }
         .pos-status-resolved { color: var(--muted); }
+        .pnl-pos { color: var(--yes); font-weight: 600; }
+        .pnl-neg { color: var(--no); font-weight: 600; }
+        .pnl-zero { color: var(--muted); }
+        .btn-sell {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            padding: 0.3rem 0.6rem;
+            border: 1px solid var(--no);
+            background: transparent;
+            color: var(--no);
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .btn-sell:hover { background: var(--no); color: var(--bg); }
+        .status-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            letter-spacing: 0.06em;
+            padding: 0.2rem 0.5rem;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+        .status-badge.open { border-color: var(--accent); color: var(--accent); }
+        .sell-info-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+            padding: 1rem;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+        }
+        .sell-info-item { font-family: 'IBM Plex Mono', monospace; }
+        .sell-info-label { font-size: 0.65rem; color: var(--muted); margin-bottom: 0.25rem; text-transform: uppercase; letter-spacing: 0.06em; }
+        .sell-info-value { font-size: 0.9rem; font-weight: 600; }
+        .sell-preview {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            padding: 0.75rem 1rem;
+            margin-bottom: 1.25rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+        }
+        .sell-preview-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.2rem 0;
+        }
         /* LEADERBOARD */
         .leaderboard-list {
             border: 1px solid var(--border);
@@ -924,6 +977,27 @@
     </div>
 </div>
 
+<!-- SELL MODAL -->
+<div class="modal-overlay" id="sellModal">
+    <div class="modal">
+        <div class="modal-title">
+            Cerrar Posición
+            <button class="modal-close" onclick="closeModal('sellModal')">✕</button>
+        </div>
+        <div class="bet-modal-market" id="sellModalTitle"></div>
+        <div class="sell-info-grid" id="sellModalInfo"></div>
+        <div class="form-group">
+            <label class="form-label">Créditos a vender (máx: <span id="sellMaxLabel"></span>)</label>
+            <input class="form-input" type="number" id="sellAmountInput" min="1" oninput="updateSellPreview()" />
+        </div>
+        <div class="sell-preview" id="sellPreview"></div>
+        <div class="modal-actions">
+            <button class="btn" onclick="closeModal('sellModal')">Cancelar</button>
+            <button class="btn btn-primary" onclick="confirmSell()">Confirmar Venta</button>
+        </div>
+    </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -1351,11 +1425,21 @@
             if (!res.ok) throw new Error(data.error);
 
             closeModal('betModal');
-            showToast(`Posición ${selectedPosition.toUpperCase()} tomada por ${amount} créditos`);
 
-            // Refresh user credits
+            const entryPrice = selectedPosition === 'yes' ? data.entry_price : data.entry_price;
+            showToast(`${selectedPosition.toUpperCase()} comprado a ${entryPrice}¢ por ${amount} créditos`);
+
+            // Refresh credits and market prices
             currentUser.credits -= amount;
             document.getElementById('userCredits').textContent = currentUser.credits.toLocaleString();
+
+            // Update local event prices so cards reflect the new price immediately
+            const ev = allEvents.find(e => e.id === selectedEventId);
+            if (ev && data.yes_price) {
+                ev.yes_price = data.yes_price;
+                ev.no_price = data.no_price;
+                renderMarkets(allEvents);
+            }
         } catch (err) {
             showToast(err.message || 'Error procesando la posición', true);
         }
@@ -1376,27 +1460,28 @@
                     <div class="empty-state">
                         <h3>Sin posiciones</h3>
                         <p>Aún no has tomado ninguna posición en los mercados.</p>
-                        <button class="btn btn-primary" onclick="showPage('markets')" style="margin-top: 0.5rem;">Ver Mercados</button>
+                        <button class="btn btn-primary" onclick="showPage('markets', null)" style="margin-top: 0.5rem;">Ver Mercados</button>
                     </div>`;
                 return;
             }
 
-            // Calculate performance stats
-            let wins = 0, losses = 0, pending = 0, totalWagered = 0, totalPayout = 0;
+            // ── Stats ──────────────────────────────────────────────
+            let openCount = 0, unrealizedPnl = 0, realizedPnl = 0, totalInvested = 0;
             positions.forEach(p => {
-                totalWagered += p.amount;
-                if (p.event_status === 'resolved') {
-                    if (p.position === p.resolved_as) {
-                        wins++;
-                        totalPayout += p.amount * 2;
-                    } else {
-                        losses++;
-                    }
+                const ep = p.entry_price || 50;
+                if (p.status === 'OPEN' || !p.status) {
+                    openCount++;
+                    totalInvested += p.amount;
+                    const currentPrice = p.position === 'yes' ? (p.yes_price || 50) : (p.no_price || 50);
+                    unrealizedPnl += Math.round(p.amount * currentPrice / ep) - p.amount;
                 } else {
-                    pending++;
+                    realizedPnl += p.pnl || 0;
                 }
             });
-            const profit = totalPayout - (wins + losses > 0 ? positions.filter(p => p.event_status === 'resolved').reduce((sum, p) => sum + p.amount, 0) : 0);
+            const totalPnl = unrealizedPnl + realizedPnl;
+
+            const fmt = n => (n >= 0 ? '+' : '') + n;
+            const pnlColor = n => n >= 0 ? 'var(--yes)' : 'var(--no)';
 
             const statsHtml = `
                 <div style="display: flex; gap: 2rem; margin-bottom: 2rem; flex-wrap: wrap;">
@@ -1405,50 +1490,55 @@
                         <span class="stat-label">Total</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-value" style="color: var(--yes);">${wins}</span>
-                        <span class="stat-label">Ganadas</span>
+                        <span class="stat-value" style="color: var(--accent);">${openCount}</span>
+                        <span class="stat-label">Abiertas</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-value" style="color: var(--no);">${losses}</span>
-                        <span class="stat-label">Perdidas</span>
+                        <span class="stat-value" style="color: ${pnlColor(unrealizedPnl)};">${fmt(unrealizedPnl)}</span>
+                        <span class="stat-label">PnL No Realizado</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-value" style="color: var(--muted);">${pending}</span>
-                        <span class="stat-label">Pendientes</span>
+                        <span class="stat-value" style="color: ${pnlColor(realizedPnl)};">${fmt(realizedPnl)}</span>
+                        <span class="stat-label">PnL Realizado</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-value" style="color: ${profit >= 0 ? 'var(--yes)' : 'var(--no)'};">${profit >= 0 ? '+' : ''}${profit}</span>
-                        <span class="stat-label">Beneficio</span>
+                        <span class="stat-value" style="color: ${pnlColor(totalPnl)};">${fmt(totalPnl)}</span>
+                        <span class="stat-label">PnL Total</span>
                     </div>
                 </div>`;
 
+            // ── Rows ───────────────────────────────────────────────
             const rows = positions.map(p => {
-                const date = new Date(p.created_at).toLocaleDateString('es-CO', {
-                    day: 'numeric', month: 'short'
-                });
+                const ep = p.entry_price || 50;
                 const posClass = p.position === 'yes' ? 'pos-yes' : 'pos-no';
+                const posLabel = p.position === 'yes' ? 'SÍ' : 'NO';
+                const isClosed = p.status === 'CLOSED';
 
-                let resultText, resultStyle;
-                if (p.event_status === 'resolved') {
-                    if (p.position === p.resolved_as) {
-                        resultText = `GANÓ +${p.amount}`;
-                        resultStyle = 'color: var(--yes); font-weight: 600;';
-                    } else {
-                        resultText = `PERDIÓ -${p.amount}`;
-                        resultStyle = 'color: var(--no); font-weight: 600;';
-                    }
+                let pnlCell, actionCell, currentPriceCell;
+
+                if (isClosed) {
+                    const pnl = p.pnl || 0;
+                    pnlCell = `<span class="${pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}">${fmt(pnl)}</span>`;
+                    currentPriceCell = `<span class="status-badge">CERRADO</span>`;
+                    actionCell = `—`;
                 } else {
-                    resultText = 'PENDIENTE';
-                    resultStyle = 'color: var(--muted);';
+                    const currentPrice = p.position === 'yes' ? (p.yes_price || 50) : (p.no_price || 50);
+                    const currentValue = Math.round(p.amount * currentPrice / ep);
+                    const pnl = currentValue - p.amount;
+                    pnlCell = `<span class="${pnl >= 0 ? 'pnl-pos' : pnl < 0 ? 'pnl-neg' : 'pnl-zero'}">${fmt(pnl)}</span>`;
+                    currentPriceCell = `${currentPrice}¢`;
+                    actionCell = `<button class="btn-sell" onclick="openSellModal(${p.id}, ${p.amount}, ${ep}, ${currentPrice}, '${p.position}', ${JSON.stringify(p.event_title)})">VENDER</button>`;
                 }
 
                 return `
                     <tr>
-                        <td>${p.event_title}</td>
-                        <td class="${posClass}">${p.position.toUpperCase()}</td>
+                        <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${p.event_title}</td>
+                        <td class="${posClass}">${posLabel}</td>
                         <td>${p.amount}</td>
-                        <td style="${resultStyle}">${resultText}</td>
-                        <td>${date}</td>
+                        <td>${ep}¢</td>
+                        <td>${currentPriceCell}</td>
+                        <td>${pnlCell}</td>
+                        <td>${actionCell}</td>
                     </tr>`;
             }).join('');
 
@@ -1458,20 +1548,113 @@
                     <thead>
                         <tr>
                             <th>Mercado</th>
-                            <th>Posición</th>
-                            <th>Apuesta</th>
-                            <th>Resultado</th>
-                            <th>Fecha</th>
+                            <th>Pos</th>
+                            <th>Invertido</th>
+                            <th>Entrada</th>
+                            <th>Actual</th>
+                            <th>PnL</th>
+                            <th>Acción</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
                 </table>`;
         } catch (err) {
+            console.error('loadPositions error:', err);
             container.innerHTML = `
                 <div class="empty-state">
                     <h3>Error cargando posiciones</h3>
                     <p>Intenta de nuevo más tarde.</p>
                 </div>`;
+        }
+    }
+
+    // ─── Sell Position ───────────────────────────────────────
+
+    let _sellBetId = null;
+
+    function openSellModal(betId, amount, entryPrice, currentPrice, side, eventTitle) {
+        _sellBetId = betId;
+        const modal = document.getElementById('sellModal');
+        modal.dataset.entryPrice = entryPrice;
+        modal.dataset.currentPrice = currentPrice;
+        modal.dataset.maxAmount = amount;
+
+        document.getElementById('sellModalTitle').textContent = eventTitle;
+        document.getElementById('sellMaxLabel').textContent = amount;
+        document.getElementById('sellAmountInput').value = amount;
+        document.getElementById('sellAmountInput').max = amount;
+
+        const posClass = side === 'yes' ? 'pos-yes' : 'pos-no';
+        const priceChange = currentPrice - entryPrice;
+        const priceColor = priceChange >= 0 ? 'var(--yes)' : 'var(--no)';
+        document.getElementById('sellModalInfo').innerHTML = `
+            <div class="sell-info-item">
+                <div class="sell-info-label">Posición</div>
+                <div class="sell-info-value ${posClass}">${side === 'yes' ? 'SÍ' : 'NO'}</div>
+            </div>
+            <div class="sell-info-item">
+                <div class="sell-info-label">Precio Entrada</div>
+                <div class="sell-info-value">${entryPrice}¢</div>
+            </div>
+            <div class="sell-info-item">
+                <div class="sell-info-label">Precio Actual</div>
+                <div class="sell-info-value" style="color:${priceColor};">${currentPrice}¢ <span style="font-size:0.7rem;">(${priceChange >= 0 ? '+' : ''}${priceChange}¢)</span></div>
+            </div>`;
+
+        updateSellPreview();
+        document.getElementById('sellModal').classList.add('active');
+    }
+
+    function updateSellPreview() {
+        const modal = document.getElementById('sellModal');
+        const ep = parseInt(modal.dataset.entryPrice) || 50;
+        const cp = parseInt(modal.dataset.currentPrice) || 50;
+        const max = parseInt(modal.dataset.maxAmount) || 0;
+        const sellAmt = Math.min(Math.max(parseInt(document.getElementById('sellAmountInput').value) || 0, 0), max);
+
+        const creditsOut = Math.round(sellAmt * cp / ep);
+        const pnl = creditsOut - sellAmt;
+        const pnlClass = pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+
+        document.getElementById('sellPreview').innerHTML = `
+            <div class="sell-preview-row">
+                <span style="color:var(--muted);">Créditos vendidos</span>
+                <span>${sellAmt}</span>
+            </div>
+            <div class="sell-preview-row">
+                <span style="color:var(--muted);">Recibirás</span>
+                <span>${creditsOut} créditos</span>
+            </div>
+            <div class="sell-preview-row" style="border-top:1px solid var(--border); margin-top:0.4rem; padding-top:0.4rem;">
+                <span style="color:var(--muted);">PnL</span>
+                <span class="${pnlClass}">${pnl >= 0 ? '+' : ''}${pnl} créditos</span>
+            </div>`;
+    }
+
+    async function confirmSell() {
+        const sellAmt = parseInt(document.getElementById('sellAmountInput').value);
+        const max = parseInt(document.getElementById('sellModal').dataset.maxAmount) || 0;
+        if (!sellAmt || sellAmt < 1 || sellAmt > max) {
+            showToast('Cantidad inválida', true);
+            return;
+        }
+        try {
+            const res = await fetch(`${API}/bets/${_sellBetId}/sell`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ sell_amount: sellAmt })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+
+            closeModal('sellModal');
+            currentUser.credits = data.new_credits;
+            document.getElementById('userCredits').textContent = currentUser.credits.toLocaleString();
+            const pnl = data.pnl;
+            showToast(`Vendido. PnL: ${pnl >= 0 ? '+' : ''}${pnl} créditos`);
+            loadPositions();
+        } catch (err) {
+            showToast(err.message || 'Error al vender posición', true);
         }
     }
 
@@ -1672,6 +1855,13 @@
     checkAuth();
     loadEvents();
     setInterval(loadEvents, 30000);
+
+    // Refresh positions live prices every 30s when the tab is active
+    setInterval(() => {
+        if (document.getElementById('page-positions').classList.contains('active') && currentUser) {
+            loadPositions();
+        }
+    }, 30000);
 </script>
 </body>
 </html>
