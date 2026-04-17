@@ -366,6 +366,59 @@
             opacity: 1;
             font-weight: 600;
         }
+        /* HOT MARKETS */
+        .hot-section { margin-bottom: 2.5rem; }
+        .hot-section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .hot-section-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--accent);
+        }
+        .hot-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 1px;
+            background: var(--border);
+            border: 1px solid var(--border);
+        }
+        .hot-card {
+            background: var(--bg);
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: background 0.15s;
+            position: relative;
+            overflow: hidden;
+            border-top: 2px solid var(--accent);
+        }
+        .hot-card:hover { background: var(--bg2); }
+        .hot-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--bg);
+            background: var(--accent);
+            padding: 0.15rem 0.45rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-bottom: 0.6rem;
+        }
+        .hot-bets-count {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.62rem;
+            color: var(--muted);
+            margin-top: 0.6rem;
+        }
+
         /* PRICE BAR */
         .price-bar-container { margin-bottom: 1rem; }
         .price-bar {
@@ -819,6 +872,12 @@
                     <span class="stat-label">Posiciones</span>
                 </div>
             </div>
+        </div>
+        <div id="hotSection" class="hot-section" style="display:none;">
+            <div class="hot-section-header">
+                <span class="hot-section-title">🔥 Mercados en tendencia</span>
+            </div>
+            <div id="hotContainer" class="hot-grid"></div>
         </div>
         <div class="section-header">
             <div class="section-title">Mercados Activos</div>
@@ -1349,6 +1408,63 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
         const pixelsPerSecond = 50;
         const duration = tickerEl.scrollWidth / 2 / pixelsPerSecond;
         tickerEl.style.animation = `ticker ${duration}s linear infinite`;
+    }
+
+    async function loadHotMarkets() {
+        try {
+            const res = await fetch(`${API}/markets/hot`);
+            const markets = await res.json();
+            renderHotMarkets(Array.isArray(markets) ? markets : []);
+        } catch (err) {
+            // Silently hide the section if the fetch fails
+            document.getElementById('hotSection').style.display = 'none';
+        }
+    }
+
+    function renderHotMarkets(markets) {
+        const section = document.getElementById('hotSection');
+        const container = document.getElementById('hotContainer');
+        if (!markets.length) {
+            section.style.display = 'none';
+            return;
+        }
+        const rankEmoji = ['🥇', '🥈', '🥉'];
+        const cards = markets.map((event, i) => {
+            const yesWidth = event.yes_price || 50;
+            const cat = event.category || 'politics';
+            const imageHtml = event.image_url
+                ? `<div class="market-card-img">
+                       <img src="${event.image_url}" alt="" loading="lazy" onerror="this.parentElement.className='market-card-fallback ${cat}'"/>
+                   </div>`
+                : `<div class="market-card-fallback ${cat}"></div>`;
+            const isOpen = event.status === 'open';
+            const betBtns = isOpen
+                ? `<button class="btn-yes" onclick="event.stopPropagation();openBetModal(${event.id},'yes')">SÍ</button>
+                   <button class="btn-no"  onclick="event.stopPropagation();openBetModal(${event.id},'no')">NO</button>`
+                : `<span style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:var(--muted);">CERRADO</span>`;
+            return `
+                <div class="hot-card" onclick="openMarketDetail(${event.id})">
+                    ${imageHtml}
+                    <div class="hot-badge">${rankEmoji[i]} HOT</div>
+                    <div class="market-title">${event.title}</div>
+                    <div class="market-countdown${!isOpen ? ' closed' : ''}" data-closes-at="${event.close_time || ''}">
+                        <span class="countdown-label">Cierra en: </span><span class="countdown-value">${!isOpen ? 'CERRADO' : '...'}</span>
+                    </div>
+                    <div class="price-bar-container">
+                        <div class="price-bar">
+                            <div class="price-bar-fill" style="width: ${yesWidth}%"></div>
+                        </div>
+                        <div class="price-labels">
+                            <span class="yes-label">SÍ ${event.yes_price || 50}¢</span>
+                            <span class="no-label">NO ${event.no_price || 50}¢</span>
+                        </div>
+                    </div>
+                    <div class="hot-bets-count">${event.total_bets} apuesta${event.total_bets !== 1 ? 's' : ''} en las últimas 24h</div>
+                </div>`;
+        }).join('');
+        container.innerHTML = cards;
+        section.style.display = '';
+        startCountdownTimers();
     }
 
     function renderMarkets(events) {
@@ -2295,7 +2411,9 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
 
     checkAuth();
     loadEvents();
+    loadHotMarkets();
     setInterval(loadEvents, 30000);
+    setInterval(loadHotMarkets, 30000);
 
     // Refresh positions live prices every 30s when the tab is active
     setInterval(() => {

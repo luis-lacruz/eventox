@@ -731,6 +731,28 @@ app.get("/leaderboard", async (req, res) => {
   }
 });
 
+// ─── Hot Markets ─────────────────────────────────────────────
+
+app.get("/markets/hot", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT e.id, e.title, e.yes_price, e.no_price, e.resolution_source,
+              e.close_time, e.status, e.category, e.image_url,
+              COUNT(b.id)::int AS total_bets
+       FROM bets b
+       JOIN events e ON e.id = b.event_id
+       WHERE b.created_at >= NOW() - INTERVAL '24 hours'
+       GROUP BY e.id
+       ORDER BY total_bets DESC
+       LIMIT 3`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching hot markets:", err.message);
+    res.status(500).json({ error: "Failed to fetch hot markets" });
+  }
+});
+
 // ─── Price History ───────────────────────────────────────────
 
 app.get('/events/:id/price-history', async (req, res) => {
