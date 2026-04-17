@@ -1839,126 +1839,190 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
 
     // ─── My Positions ────────────────────────────────────────
 
+    let _allPositions = [];
+    let closedPage = 1;
+    const CLOSED_PER_PAGE = 10;
+
     async function loadPositions() {
-        const container = document.getElementById('positionsContainer');
         try {
             const res = await fetch(`${API}/bets/mine`, { headers: authHeaders() });
             if (!res.ok) throw new Error(`Server error ${res.status}`);
             const positions = await res.json();
             if (!Array.isArray(positions)) throw new Error('Unexpected response format');
-
-            if (positions.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <h3>Sin posiciones</h3>
-                        <p>Aún no has tomado ninguna posición en los mercados.</p>
-                        <button class="btn btn-primary" onclick="showPage('markets', null)" style="margin-top: 0.5rem;">Ver Mercados</button>
-                    </div>`;
-                return;
-            }
-
-            // ── Stats ──────────────────────────────────────────────
-            let openCount = 0, unrealizedPnl = 0, realizedPnl = 0, totalInvested = 0;
-            positions.forEach(p => {
-                const ep = p.entry_price || 50;
-                if (p.status === 'OPEN' || !p.status) {
-                    openCount++;
-                    totalInvested += p.amount;
-                    const currentPrice = p.position === 'yes' ? (p.yes_price || 50) : (p.no_price || 50);
-                    unrealizedPnl += Math.round(p.amount * currentPrice / ep) - p.amount;
-                } else {
-                    realizedPnl += p.pnl || 0;
-                }
-            });
-            const totalPnl = unrealizedPnl + realizedPnl;
-
-            const fmt = n => (n >= 0 ? '+' : '') + n;
-            const pnlColor = n => n >= 0 ? 'var(--yes)' : 'var(--no)';
-
-            const statsHtml = `
-                <div style="display: flex; gap: 2rem; margin-bottom: 2rem; flex-wrap: wrap;">
-                    <div class="stat">
-                        <span class="stat-value">${positions.length}</span>
-                        <span class="stat-label">Total</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value" style="color: var(--accent);">${openCount}</span>
-                        <span class="stat-label">Abiertas</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value" style="color: ${pnlColor(unrealizedPnl)};">${fmt(unrealizedPnl)}</span>
-                        <span class="stat-label">PnL No Realizado</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value" style="color: ${pnlColor(realizedPnl)};">${fmt(realizedPnl)}</span>
-                        <span class="stat-label">PnL Realizado</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value" style="color: ${pnlColor(totalPnl)};">${fmt(totalPnl)}</span>
-                        <span class="stat-label">PnL Total</span>
-                    </div>
-                </div>`;
-
-            // ── Two-column widget view ─────────────────────────────
-            const getValue = p => {
-                if (p.status === 'CLOSED') return p.amount + (p.pnl || 0);
-                const cp = p.position === 'yes' ? (p.yes_price || 50) : (p.no_price || 50);
-                return Math.round(p.amount * cp / (p.entry_price || 50));
-            };
-            const byRecent = [...positions]
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-                .slice(0, 5);
-            const byValue = [...positions]
-                .sort((a, b) => getValue(b) - getValue(a))
-                .slice(0, 5);
-
-            const buildPosRow = p => {
-                const isOpen = p.status !== 'CLOSED';
-                const ep = p.entry_price || 50;
-                const cp = p.position === 'yes' ? (p.yes_price || 50) : (p.no_price || 50);
-                const pnl = isOpen
-                    ? Math.round(p.amount * cp / ep) - p.amount
-                    : (p.pnl || 0);
-                const pnlClass = pnl > 0 ? 'pnl-pos' : pnl < 0 ? 'pnl-neg' : 'pnl-zero';
-                const actionHtml = isOpen
-                    ? `<button class="btn-sell"
-                           data-id="${p.id}" data-amount="${p.amount}"
-                           data-entry="${ep}" data-current="${cp}"
-                           data-side="${p.position}"
-                           data-title="${p.event_title.replace(/"/g, '&quot;')}"
-                           onclick="openSellModalFromBtn(this)">VENDER</button>`
-                    : `<span class="pos-closed-tag">CERRADO</span>`;
-                return `
-                    <div class="pos-row">
-                        <span class="pos-badge ${p.position}">${p.position === 'yes' ? 'SÍ' : 'NO'}</span>
-                        <span class="pos-title">${p.event_title}</span>
-                        <span class="${pnlClass}" style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;white-space:nowrap;flex-shrink:0;">${fmt(pnl)}</span>
-                        ${actionHtml}
-                    </div>`;
-            };
-
-            const buildPosWidget = (title, rows) => `
-                <div class="dashboard-widget" style="flex:1;min-width:0;">
-                    <div class="widget-header">${title}</div>
-                    ${rows.length === 0
-                        ? `<div style="padding:2rem 1.25rem;font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);">Sin posiciones</div>`
-                        : rows.map(buildPosRow).join('')}
-                </div>`;
-
-            container.innerHTML = `
-                ${statsHtml}
-                <div class="dashboard-row" style="margin-top:1.5rem;">
-                    ${buildPosWidget('Más Recientes', byRecent)}
-                    ${buildPosWidget('Mayores Posiciones', byValue)}
-                </div>`;
+            _allPositions = positions;
+            closedPage = 1;
+            renderPositions();
         } catch (err) {
             console.error('loadPositions error:', err);
-            container.innerHTML = `
+            document.getElementById('positionsContainer').innerHTML = `
                 <div class="empty-state">
                     <h3>Error cargando posiciones</h3>
                     <p>Intenta de nuevo más tarde.</p>
                 </div>`;
         }
+    }
+
+    function renderPositions() {
+        const container = document.getElementById('positionsContainer');
+        const positions = _allPositions;
+
+        if (positions.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>Sin posiciones</h3>
+                    <p>Aún no has tomado ninguna posición en los mercados.</p>
+                    <button class="btn btn-primary" onclick="showPage('markets', null)" style="margin-top: 0.5rem;">Ver Mercados</button>
+                </div>`;
+            return;
+        }
+
+        // ── Stats ──────────────────────────────────────────────
+        let openCount = 0, unrealizedPnl = 0, realizedPnl = 0, totalInvested = 0;
+        positions.forEach(p => {
+            const ep = p.entry_price || 50;
+            if (p.status === 'OPEN' || !p.status) {
+                openCount++;
+                totalInvested += p.amount;
+                const currentPrice = p.position === 'yes' ? (p.yes_price || 50) : (p.no_price || 50);
+                unrealizedPnl += Math.round(p.amount * currentPrice / ep) - p.amount;
+            } else {
+                realizedPnl += p.pnl || 0;
+            }
+        });
+        const totalPnl = unrealizedPnl + realizedPnl;
+
+        const fmt = n => (n >= 0 ? '+' : '') + n;
+        const pnlColor = n => n >= 0 ? 'var(--yes)' : 'var(--no)';
+
+        const statsHtml = `
+            <div style="display: flex; gap: 2rem; margin-bottom: 2rem; flex-wrap: wrap;">
+                <div class="stat">
+                    <span class="stat-value">${positions.length}</span>
+                    <span class="stat-label">Total</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" style="color: var(--accent);">${openCount}</span>
+                    <span class="stat-label">Abiertas</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" style="color: ${pnlColor(unrealizedPnl)};">${fmt(unrealizedPnl)}</span>
+                    <span class="stat-label">PnL No Realizado</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" style="color: ${pnlColor(realizedPnl)};">${fmt(realizedPnl)}</span>
+                    <span class="stat-label">PnL Realizado</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value" style="color: ${pnlColor(totalPnl)};">${fmt(totalPnl)}</span>
+                    <span class="stat-label">PnL Total</span>
+                </div>
+            </div>`;
+
+        // ── Two-column widget view ─────────────────────────────
+        const getValue = p => {
+            if (p.status === 'CLOSED') return p.amount + (p.pnl || 0);
+            const cp = p.position === 'yes' ? (p.yes_price || 50) : (p.no_price || 50);
+            return Math.round(p.amount * cp / (p.entry_price || 50));
+        };
+        const byRecent = [...positions]
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+            .slice(0, 5);
+        const byValue = [...positions]
+            .sort((a, b) => getValue(b) - getValue(a))
+            .slice(0, 5);
+
+        const buildPosRow = p => {
+            const isOpen = p.status !== 'CLOSED';
+            const ep = p.entry_price || 50;
+            const cp = p.position === 'yes' ? (p.yes_price || 50) : (p.no_price || 50);
+            const pnl = isOpen
+                ? Math.round(p.amount * cp / ep) - p.amount
+                : (p.pnl || 0);
+            const pnlClass = pnl > 0 ? 'pnl-pos' : pnl < 0 ? 'pnl-neg' : 'pnl-zero';
+            const actionHtml = isOpen
+                ? `<button class="btn-sell"
+                       data-id="${p.id}" data-amount="${p.amount}"
+                       data-entry="${ep}" data-current="${cp}"
+                       data-side="${p.position}"
+                       data-title="${p.event_title.replace(/"/g, '&quot;')}"
+                       onclick="openSellModalFromBtn(this)">VENDER</button>`
+                : `<span class="pos-closed-tag">CERRADO</span>`;
+            return `
+                <div class="pos-row">
+                    <span class="pos-badge ${p.position}">${p.position === 'yes' ? 'SÍ' : 'NO'}</span>
+                    <span class="pos-title">${p.event_title}</span>
+                    <span class="${pnlClass}" style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;white-space:nowrap;flex-shrink:0;">${fmt(pnl)}</span>
+                    ${actionHtml}
+                </div>`;
+        };
+
+        const buildPosWidget = (title, rows) => `
+            <div class="dashboard-widget" style="flex:1;min-width:0;">
+                <div class="widget-header">${title}</div>
+                ${rows.length === 0
+                    ? `<div style="padding:2rem 1.25rem;font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);">Sin posiciones</div>`
+                    : rows.map(buildPosRow).join('')}
+            </div>`;
+
+        // ── Closed history with pagination ─────────────────────
+        const closedPositions = positions
+            .filter(p => p.status === 'CLOSED')
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        let closedHistoryHtml = '';
+        if (closedPositions.length > 0) {
+            const totalClosedPages = Math.max(1, Math.ceil(closedPositions.length / CLOSED_PER_PAGE));
+            closedPage = Math.min(closedPage, totalClosedPages);
+            const pageStart = (closedPage - 1) * CLOSED_PER_PAGE;
+            const pageRows = closedPositions.slice(pageStart, pageStart + CLOSED_PER_PAGE);
+
+            const buildHistoryRow = p => {
+                const pnl = p.pnl || 0;
+                const pnlClass = pnl > 0 ? 'pnl-pos' : pnl < 0 ? 'pnl-neg' : 'pnl-zero';
+                const date = new Date(p.created_at).toLocaleDateString('es-CO', {
+                    day: 'numeric', month: 'short', year: 'numeric'
+                });
+                return `
+                    <div class="pos-row">
+                        <span class="pos-badge ${p.position}">${p.position === 'yes' ? 'SÍ' : 'NO'}</span>
+                        <span class="pos-title">${p.event_title}</span>
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);flex-shrink:0;">${date}</span>
+                        <span class="${pnlClass}" style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;white-space:nowrap;flex-shrink:0;">${fmt(pnl)}</span>
+                    </div>`;
+            };
+
+            const histPagination = totalClosedPages > 1 ? `
+                <div class="pagination-bar">
+                    <button class="page-btn" onclick="changeClosedPage(-1)" ${closedPage <= 1 ? 'disabled' : ''}>← Anterior</button>
+                    <span class="page-indicator">Página ${closedPage} de ${totalClosedPages}</span>
+                    <button class="page-btn" onclick="changeClosedPage(1)" ${closedPage >= totalClosedPages ? 'disabled' : ''}>Siguiente →</button>
+                </div>` : '';
+
+            closedHistoryHtml = `
+                <div style="margin-top:2.5rem;">
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:0.75rem;padding-bottom:0.6rem;border-bottom:1px solid var(--border);">
+                        Historial de posiciones cerradas (${closedPositions.length})
+                    </div>
+                    ${pageRows.map(buildHistoryRow).join('')}
+                    ${histPagination}
+                </div>`;
+        }
+
+        container.innerHTML = `
+            ${statsHtml}
+            <div class="dashboard-row" style="margin-top:1.5rem;">
+                ${buildPosWidget('Más Recientes', byRecent)}
+                ${buildPosWidget('Mayores Posiciones', byValue)}
+            </div>
+            ${closedHistoryHtml}`;
+    }
+
+    function changeClosedPage(delta) {
+        const total = Math.max(1, Math.ceil(
+            _allPositions.filter(p => p.status === 'CLOSED').length / CLOSED_PER_PAGE
+        ));
+        closedPage = Math.max(1, Math.min(closedPage + delta, total));
+        renderPositions();
     }
 
     // ─── Sell Position ───────────────────────────────────────
