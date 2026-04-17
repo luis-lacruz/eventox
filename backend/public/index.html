@@ -857,6 +857,45 @@
             border-color: var(--accent);
             color: var(--accent);
         }
+        /* PAGINATION */
+        .pagination-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1.25rem;
+            padding: 1.25rem 0 0.5rem;
+            border-top: 1px solid var(--border);
+            margin-top: 1px;
+        }
+        .page-btn {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 0.4rem 1rem;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .page-btn:hover:not(:disabled) {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .page-btn:disabled {
+            opacity: 0.25;
+            cursor: default;
+        }
+        .page-indicator {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+            min-width: 9rem;
+            text-align: center;
+            letter-spacing: 0.04em;
+        }
         /* MARKET DETAIL CHART */
         .detail-chart-wrap {
             position: relative;
@@ -1207,6 +1246,12 @@
     let selectedEventId = null;
     let selectedPosition = null;
     let currentFilter = 'all';
+    const MARKETS_PER_PAGE = 9;
+    let currentPage = 1;
+
+    function getFilteredEvents() {
+        return currentFilter === 'all' ? allEvents : allEvents.filter(e => e.category === currentFilter);
+    }
 
     // Helper: get auth headers for API calls
     function authHeaders() {
@@ -1534,7 +1579,11 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
                 </div>`;
             return;
         }
-        const cards = events.map(event => {
+        const totalPages = Math.max(1, Math.ceil(events.length / MARKETS_PER_PAGE));
+        currentPage = Math.min(currentPage, totalPages);
+        const pageStart = (currentPage - 1) * MARKETS_PER_PAGE;
+        const pageEvents = events.slice(pageStart, pageStart + MARKETS_PER_PAGE);
+        const cards = pageEvents.map(event => {
             const yesWidth = event.yes_price || 50;
             const closeDate = new Date(event.close_time).toLocaleDateString('es-CO', {
                 day: 'numeric', month: 'short', year: 'numeric'
@@ -1585,7 +1634,13 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
                     </div>
                 </div>`;
         }).join('');
-        container.innerHTML = `<div class="markets-grid">${cards}</div>`;
+        const pagination = totalPages > 1 ? `
+            <div class="pagination-bar">
+                <button class="page-btn" onclick="changePage(-1)" ${currentPage <= 1 ? 'disabled' : ''}>← Anterior</button>
+                <span class="page-indicator">Página ${currentPage} de ${totalPages}</span>
+                <button class="page-btn" onclick="changePage(1)" ${currentPage >= totalPages ? 'disabled' : ''}>Siguiente →</button>
+            </div>` : '';
+        container.innerHTML = `<div class="markets-grid">${cards}</div>${pagination}`;
         startCountdownTimers();
     }
 
@@ -1618,14 +1673,18 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
 
     function filterMarkets(filter, btn) {
         currentFilter = filter;
+        currentPage = 1;
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        if (filter === 'all') {
-            renderMarkets(allEvents);
-        } else {
-            const filtered = allEvents.filter(e => e.category === filter);
-            renderMarkets(filtered);
-        }
+        renderMarkets(getFilteredEvents());
+    }
+
+    function changePage(delta) {
+        const events = getFilteredEvents();
+        const totalPages = Math.max(1, Math.ceil(events.length / MARKETS_PER_PAGE));
+        currentPage = Math.max(1, Math.min(currentPage + delta, totalPages));
+        renderMarkets(events);
+        document.getElementById('marketsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     // ─── Create Market (Admin) ───────────────────────────────
@@ -1731,7 +1790,7 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
             if (ev && data.yes_price) {
                 ev.yes_price = data.yes_price;
                 ev.no_price = data.no_price;
-                renderMarkets(allEvents);
+                renderMarkets(getFilteredEvents());
             }
         } catch (err) {
             showToast(err.message || 'Error procesando la posición', true);
