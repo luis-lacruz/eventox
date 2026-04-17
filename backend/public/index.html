@@ -366,107 +366,109 @@
             opacity: 1;
             font-weight: 600;
         }
-        /* TOP TRADERS WIDGET */
-        .top-traders-widget {
-            border: 1px solid var(--border);
+        /* DASHBOARD ROW — Trending + Top Traders */
+        .dashboard-row {
+            display: flex;
+            gap: 1rem;
             margin-bottom: 2.5rem;
+            align-items: stretch;
         }
-        .top-traders-header {
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.65rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-            color: var(--muted);
-            padding: 0.6rem 1rem;
-            border-bottom: 1px solid var(--border);
+        .dashboard-widget {
             background: var(--bg2);
-        }
-        .top-traders-item {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.55rem 1rem;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg);
-            transition: background 0.15s;
-        }
-        .top-traders-item:last-child { border-bottom: none; }
-        .top-traders-item:hover { background: var(--bg2); }
-        .tt-rank {
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.68rem;
-            font-weight: 600;
-            color: var(--muted);
-            width: 1.6rem;
-            flex-shrink: 0;
-        }
-        .top-traders-item.tt-first .tt-rank,
-        .top-traders-item.tt-first .tt-username { color: var(--accent); }
-        .tt-username {
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.72rem;
-            color: var(--text);
-            flex: 1;
-        }
-        .tt-username.is-you { color: var(--accent); }
-        .tt-credits {
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.68rem;
-            color: var(--yes);
-        }
-
-        /* HOT MARKETS */
-        .hot-section { margin-bottom: 2.5rem; }
-        .hot-section-header {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-        .hot-section-title {
-            font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.7rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-            color: var(--accent);
-        }
-        .hot-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-            gap: 1px;
-            background: var(--border);
-            border: 1px solid var(--border);
-        }
-        .hot-card {
-            background: var(--bg);
-            padding: 1.5rem;
-            cursor: pointer;
-            transition: background 0.15s;
-            position: relative;
+            border: 1px solid rgba(204,255,0,0.1);
+            border-radius: 16px;
             overflow: hidden;
-            border-top: 2px solid var(--accent);
+            box-shadow: 0 0 40px rgba(204,255,0,0.02);
+            display: flex;
+            flex-direction: column;
         }
-        .hot-card:hover { background: var(--bg2); }
-        .hot-badge {
+        .widget-hot     { flex: 7; min-width: 0; }
+        .widget-traders { flex: 3; min-width: 0; }
+        .widget-header {
             font-family: 'IBM Plex Mono', monospace;
             font-size: 0.62rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--muted);
+            padding: 0.9rem 1.25rem;
+            border-bottom: 1px solid rgba(255,255,255,0.045);
+            flex-shrink: 0;
+        }
+        /* Hot cards inside widget */
+        .widget-hot-grid {
+            display: flex;
+            flex: 1;
+        }
+        .hot-card {
+            flex: 1;
+            min-width: 0;
+            padding: 1.1rem 1.25rem;
+            cursor: pointer;
+            transition: background 0.15s;
+            border-right: 1px solid rgba(255,255,255,0.04);
+        }
+        .hot-card:last-child { border-right: none; }
+        .hot-card:hover { background: rgba(255,255,255,0.02); }
+        .hot-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
             text-transform: uppercase;
             letter-spacing: 0.08em;
             color: var(--bg);
             background: var(--accent);
-            padding: 0.15rem 0.45rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
             display: inline-flex;
             align-items: center;
-            gap: 0.25rem;
+            gap: 0.2rem;
             margin-bottom: 0.6rem;
         }
         .hot-bets-count {
             font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.62rem;
+            font-size: 0.6rem;
             color: var(--muted);
-            margin-top: 0.6rem;
+            margin-top: 0.5rem;
+        }
+        /* Traders scoreboard */
+        .tt-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1.25rem;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            transition: background 0.15s;
+        }
+        .tt-row:last-child { border-bottom: none; }
+        .tt-row:hover { background: rgba(255,255,255,0.025); }
+        .tt-medal {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 700;
+            width: 2rem;
+            flex-shrink: 0;
+        }
+        .tt-medal.rank-1 { color: #FFD700; }
+        .tt-medal.rank-2 { color: #A8A9AD; }
+        .tt-medal.rank-3 { color: #CD7F32; }
+        .tt-medal.rank-other { color: var(--muted); font-weight: 500; }
+        .tt-name {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text);
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .tt-name.rank-1 { color: #FFD700; }
+        .tt-name.is-you { color: var(--accent); }
+        .tt-creds {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--yes);
+            white-space: nowrap;
         }
 
         /* PRICE BAR */
@@ -873,6 +875,10 @@
             main { padding: 1rem; }
             .header-right { gap: 0.5rem; }
             .nav-tab { padding: 0.7rem 1rem; font-size: 0.7rem; }
+            .dashboard-row { flex-direction: column; }
+            .widget-hot-grid { flex-direction: column; }
+            .hot-card { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.04); }
+            .hot-card:last-child { border-bottom: none; }
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -922,15 +928,15 @@
                 </div>
             </div>
         </div>
-        <div id="hotSection" class="hot-section" style="display:none;">
-            <div class="hot-section-header">
-                <span class="hot-section-title">🔥 Mercados en tendencia</span>
+        <div id="dashboardRow" class="dashboard-row" style="display:none;">
+            <div class="dashboard-widget widget-hot">
+                <div class="widget-header">🔥 Mercados en Tendencia</div>
+                <div id="hotContainer" class="widget-hot-grid"></div>
             </div>
-            <div id="hotContainer" class="hot-grid"></div>
-        </div>
-        <div id="topTradersWidget" class="top-traders-widget" style="display:none;">
-            <div class="top-traders-header">Top Traders Esta Semana 🏆</div>
-            <div id="topTradersContainer"></div>
+            <div class="dashboard-widget widget-traders">
+                <div class="widget-header">Top Traders Esta Semana 🏆</div>
+                <div id="topTradersContainer"></div>
+            </div>
         </div>
         <div class="section-header">
             <div class="section-title">Mercados Activos</div>
@@ -1469,27 +1475,19 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
             const markets = await res.json();
             renderHotMarkets(Array.isArray(markets) ? markets : []);
         } catch (err) {
-            // Silently hide the section if the fetch fails
-            document.getElementById('hotSection').style.display = 'none';
+            document.getElementById('hotContainer').innerHTML = '';
         }
     }
 
     function renderHotMarkets(markets) {
-        const section = document.getElementById('hotSection');
         const container = document.getElementById('hotContainer');
         if (!markets.length) {
-            section.style.display = 'none';
+            container.innerHTML = `<div style="flex:1;display:flex;align-items:center;justify-content:center;padding:2rem;font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:var(--muted);">Sin tendencias en las últimas 24h</div>`;
             return;
         }
         const rankEmoji = ['🥇', '🥈', '🥉'];
-        const cards = markets.map((event, i) => {
+        container.innerHTML = markets.map((event, i) => {
             const yesWidth = event.yes_price || 50;
-            const cat = event.category || 'politics';
-            const imageHtml = event.image_url
-                ? `<div class="market-card-img">
-                       <img src="${event.image_url}" alt="" loading="lazy" onerror="this.parentElement.className='market-card-fallback ${cat}'"/>
-                   </div>`
-                : `<div class="market-card-fallback ${cat}"></div>`;
             const isOpen = event.status === 'open';
             const betBtns = isOpen
                 ? `<button class="btn-yes" onclick="event.stopPropagation();openBetModal(${event.id},'yes')">SÍ</button>
@@ -1497,7 +1495,6 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
                 : `<span style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;color:var(--muted);">CERRADO</span>`;
             return `
                 <div class="hot-card" onclick="openMarketDetail(${event.id})">
-                    ${imageHtml}
                     <div class="hot-badge">${rankEmoji[i]} HOT</div>
                     <div class="market-title">${event.title}</div>
                     <div class="market-countdown${!isOpen ? ' closed' : ''}" data-closes-at="${event.close_time || ''}">
@@ -1505,18 +1502,17 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
                     </div>
                     <div class="price-bar-container">
                         <div class="price-bar">
-                            <div class="price-bar-fill" style="width: ${yesWidth}%"></div>
+                            <div class="price-bar-fill" style="width:${yesWidth}%"></div>
                         </div>
                         <div class="price-labels">
                             <span class="yes-label">SÍ ${event.yes_price || 50}¢</span>
                             <span class="no-label">NO ${event.no_price || 50}¢</span>
                         </div>
                     </div>
-                    <div class="hot-bets-count">${event.total_bets} apuesta${event.total_bets !== 1 ? 's' : ''} en las últimas 24h</div>
+                    <div class="hot-bets-count">${event.total_bets} apuesta${event.total_bets !== 1 ? 's' : ''} en 24h</div>
+                    <div class="bet-buttons" style="margin-top:0.75rem;">${betBtns}</div>
                 </div>`;
         }).join('');
-        container.innerHTML = cards;
-        section.style.display = '';
         startCountdownTimers();
     }
 
@@ -2019,25 +2015,26 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
     // ─── Top Traders Widget ──────────────────────────────────
 
     async function loadTopTraders() {
-        const widget = document.getElementById('topTradersWidget');
+        const row = document.getElementById('dashboardRow');
         const container = document.getElementById('topTradersContainer');
         try {
             const res = await fetch(`${API}/leaderboard`);
             const leaders = await res.json();
             const top5 = leaders.slice(0, 5);
             if (!top5.length) return;
+            const medalClass = r => r === 1 ? 'rank-1' : r === 2 ? 'rank-2' : r === 3 ? 'rank-3' : 'rank-other';
             container.innerHTML = top5.map((l, i) => {
                 const rank = i + 1;
-                const isFirst = rank === 1;
+                const mc = medalClass(rank);
                 const isYou = currentUser && l.username === currentUser.username;
                 return `
-                    <div class="top-traders-item${isFirst ? ' tt-first' : ''}">
-                        <span class="tt-rank">#${rank}</span>
-                        <span class="tt-username${isYou ? ' is-you' : ''}">${l.username}${isYou ? ' (tú)' : ''}</span>
-                        <span class="tt-credits">${l.credits.toLocaleString()}¢</span>
+                    <div class="tt-row">
+                        <span class="tt-medal ${mc}">#${rank}</span>
+                        <span class="tt-name ${mc}${isYou ? ' is-you' : ''}">${l.username}${isYou ? ' (tú)' : ''}</span>
+                        <span class="tt-creds">${l.credits.toLocaleString()}¢</span>
                     </div>`;
             }).join('');
-            widget.style.display = '';
+            row.style.display = '';
         } catch (err) {
             // Silently hide if fetch fails
         }
