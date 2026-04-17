@@ -366,6 +366,56 @@
             opacity: 1;
             font-weight: 600;
         }
+        /* TOP TRADERS WIDGET */
+        .top-traders-widget {
+            border: 1px solid var(--border);
+            margin-bottom: 2.5rem;
+        }
+        .top-traders-header {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--muted);
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg2);
+        }
+        .top-traders-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.55rem 1rem;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+            transition: background 0.15s;
+        }
+        .top-traders-item:last-child { border-bottom: none; }
+        .top-traders-item:hover { background: var(--bg2); }
+        .tt-rank {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            font-weight: 600;
+            color: var(--muted);
+            width: 1.6rem;
+            flex-shrink: 0;
+        }
+        .top-traders-item.tt-first .tt-rank,
+        .top-traders-item.tt-first .tt-username { color: var(--accent); }
+        .tt-username {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text);
+            flex: 1;
+        }
+        .tt-username.is-you { color: var(--accent); }
+        .tt-credits {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--yes);
+        }
+
         /* HOT MARKETS */
         .hot-section { margin-bottom: 2.5rem; }
         .hot-section-header {
@@ -841,7 +891,6 @@
 <div class="nav-tabs" id="navTabs" style="display: none;">
     <button class="nav-tab active" onclick="showPage('markets', this)">Mercados</button>
     <button class="nav-tab" onclick="showPage('positions', this)">Mis Posiciones</button>
-    <button class="nav-tab" onclick="showPage('leaderboard', this)">Ranking</button>
 <button class="nav-tab" id="adminTab" style="display:none;" onclick="showPage('admin', this)">Admin</button>
 </div>
 
@@ -878,6 +927,10 @@
                 <span class="hot-section-title">🔥 Mercados en tendencia</span>
             </div>
             <div id="hotContainer" class="hot-grid"></div>
+        </div>
+        <div id="topTradersWidget" class="top-traders-widget" style="display:none;">
+            <div class="top-traders-header">Top Traders Esta Semana 🏆</div>
+            <div id="topTradersContainer"></div>
         </div>
         <div class="section-header">
             <div class="section-title">Mercados Activos</div>
@@ -1963,6 +2016,33 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
         }
     }
 
+    // ─── Top Traders Widget ──────────────────────────────────
+
+    async function loadTopTraders() {
+        const widget = document.getElementById('topTradersWidget');
+        const container = document.getElementById('topTradersContainer');
+        try {
+            const res = await fetch(`${API}/leaderboard`);
+            const leaders = await res.json();
+            const top5 = leaders.slice(0, 5);
+            if (!top5.length) return;
+            container.innerHTML = top5.map((l, i) => {
+                const rank = i + 1;
+                const isFirst = rank === 1;
+                const isYou = currentUser && l.username === currentUser.username;
+                return `
+                    <div class="top-traders-item${isFirst ? ' tt-first' : ''}">
+                        <span class="tt-rank">#${rank}</span>
+                        <span class="tt-username${isYou ? ' is-you' : ''}">${l.username}${isYou ? ' (tú)' : ''}</span>
+                        <span class="tt-credits">${l.credits.toLocaleString()}¢</span>
+                    </div>`;
+            }).join('');
+            widget.style.display = '';
+        } catch (err) {
+            // Silently hide if fetch fails
+        }
+    }
+
     // ─── Modals ──────────────────────────────────────────────
 
     function closeModal(id) {
@@ -2412,8 +2492,10 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
     checkAuth();
     loadEvents();
     loadHotMarkets();
+    loadTopTraders();
     setInterval(loadEvents, 30000);
     setInterval(loadHotMarkets, 30000);
+    setInterval(loadTopTraders, 30000);
 
     // Refresh positions live prices every 30s when the tab is active
     setInterval(() => {
