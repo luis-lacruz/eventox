@@ -261,7 +261,7 @@ app.get("/auth/me", authenticateToken, async (req, res) => {
 app.get("/events", async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT * FROM events ORDER BY created_at DESC"
+      "SELECT * FROM events WHERE status != 'upcoming' ORDER BY created_at DESC"
     );
     res.json(result.rows);
   } catch (err) {
@@ -270,23 +270,71 @@ app.get("/events", async (req, res) => {
   }
 });
 
+// ─── Upcoming Markets ────────────────────────────────────────
+
+app.get("/events/upcoming", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM events WHERE status = 'upcoming' ORDER BY opens_at ASC"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching upcoming events:", err.message);
+    res.status(500).json({ error: "Failed to fetch upcoming events" });
+  }
+});
+
+app.post("/events/:id/watch", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      "UPDATE events SET watch_count = COALESCE(watch_count, 0) + 1 WHERE id = $1 RETURNING watch_count",
+      [id]
+    );
+    if (result.rows.length === 0)
+      return res.status(404).json({ error: "Market not found" });
+    res.json({ watch_count: result.rows[0].watch_count });
+  } catch (err) {
+    console.error("Error watching event:", err.message);
+    res.status(500).json({ error: "Failed to watch event" });
+  }
+});
+
+app.get("/events/:id/watching", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      "SELECT watch_count FROM events WHERE id = $1",
+      [id]
+    );
+    if (result.rows.length === 0)
+      return res.status(404).json({ error: "Market not found" });
+    res.json({ watch_count: result.rows[0].watch_count || 0 });
+  } catch (err) {
+    console.error("Error fetching watch count:", err.message);
+    res.status(500).json({ error: "Failed to fetch watch count" });
+  }
+});
+
 /**
  * POST /events
  * Create a new market. Admin only.
- * Body: { title, description?, category?, resolution_source?, close_time? }
+ * Body: { title, description?, category?, resolution_source?, close_time?, status?, opens_at? }
  */
 app.post("/events", authenticateToken, requireAdmin, async (req, res) => {
-  const { title, description, category, resolution_source, close_time, image_url } =
+  const { title, description, category, resolution_source, close_time, image_url, status, opens_at } =
     req.body;
 
   if (!title) {
     return res.status(400).json({ error: "Title is required" });
   }
 
+  const eventStatus = status === "upcoming" ? "upcoming" : "open";
+
   try {
     const result = await pool.query(
-      `INSERT INTO events (title, description, category, resolution_source, close_time, image_url)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO events (title, description, category, resolution_source, close_time, image_url, status, opens_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         title,
@@ -295,6 +343,8 @@ app.post("/events", authenticateToken, requireAdmin, async (req, res) => {
         resolution_source || null,
         close_time || null,
         image_url || null,
+        eventStatus,
+        opens_at || null,
       ]
     );
     res.status(201).json(result.rows[0]);
