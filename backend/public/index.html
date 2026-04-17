@@ -478,6 +478,77 @@
             white-space: nowrap;
         }
 
+        /* UPCOMING MARKETS */
+        .upcoming-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 1px;
+            background: var(--border);
+            border: 1px solid var(--border);
+            margin-bottom: 3rem;
+        }
+        .upcoming-card {
+            background: var(--bg);
+            padding: 1.5rem;
+            cursor: default;
+            transition: background 0.15s, filter 0.2s;
+            position: relative;
+            overflow: hidden;
+            filter: saturate(0.5) brightness(0.9);
+        }
+        .upcoming-card:hover { background: var(--bg2); filter: saturate(0.7) brightness(0.95); }
+        .upcoming-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--muted);
+            background: rgba(107,107,133,0.12);
+            border: 1px solid var(--border);
+            padding: 0.15rem 0.45rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-bottom: 0.75rem;
+        }
+        .upcoming-countdown {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.68rem;
+            color: var(--muted);
+            margin: 0.6rem 0 1rem;
+            letter-spacing: 0.04em;
+        }
+        .upcoming-countdown .countdown-value {
+            color: var(--text);
+            opacity: 0.65;
+        }
+        .watch-btn {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            padding: 0.45rem 0.9rem;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.15s;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: block;
+            width: 100%;
+            margin-top: 1rem;
+        }
+        .watch-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+        .watch-btn:disabled { opacity: 0.6; cursor: default; border-color: var(--yes); color: var(--yes); }
+        .watch-count {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.62rem;
+            color: var(--muted);
+            margin-top: 0.4rem;
+            text-align: center;
+        }
+        select.form-input { cursor: pointer; }
+
         /* PRICE BAR */
         .price-bar-container { margin-bottom: 1rem; }
         .price-bar {
@@ -982,6 +1053,7 @@
 <!-- NAV TABS (shown when logged in) -->
 <div class="nav-tabs" id="navTabs" style="display: none;">
     <button class="nav-tab active" onclick="showPage('markets', this)">Mercados</button>
+    <button class="nav-tab" onclick="showPage('upcoming', this)">Próximos</button>
     <button class="nav-tab" onclick="showPage('positions', this)">Mis Posiciones</button>
 <button class="nav-tab" id="adminTab" style="display:none;" onclick="showPage('admin', this)">Admin</button>
 </div>
@@ -1035,6 +1107,23 @@
             <button class="filter-btn" onclick="filterMarkets('security', this)">Seguridad</button>
         </div>
         <div id="marketsContainer">
+            <div class="loading">
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- UPCOMING MARKETS PAGE -->
+    <div class="page-section" id="page-upcoming">
+        <div class="hero">
+            <div>
+                <h1>Próximos<span class="highlight"> Mercados.</span></h1>
+                <p>Contratos de predicción que abrirán pronto. Notifícate para estar entre los primeros.</p>
+            </div>
+        </div>
+        <div id="upcomingContainer">
             <div class="loading">
                 <div class="loading-dot"></div>
                 <div class="loading-dot"></div>
@@ -1173,8 +1262,19 @@
             <input class="form-input" id="eventDesc" placeholder="Contexto adicional del contrato..." />
         </div>
         <div class="form-group">
+            <label class="form-label">Estado del Mercado</label>
+            <select class="form-input" id="eventStatus" onchange="toggleOpensAt()">
+                <option value="open">Activo</option>
+                <option value="upcoming">Próximo</option>
+            </select>
+        </div>
+        <div class="form-group" id="closeTimeGroup">
             <label class="form-label">Fecha de Cierre *</label>
             <input class="form-input" type="datetime-local" id="eventCloseTime" />
+        </div>
+        <div class="form-group" id="opensAtGroup" style="display:none;">
+            <label class="form-label">Fecha de Apertura *</label>
+            <input class="form-input" type="datetime-local" id="eventOpensAt" />
         </div>
         <div class="form-group">
             <label class="form-label">Fuente de Resolución</label>
@@ -1492,7 +1592,7 @@
             // Find matching tab
             const pageKeywords = {
                 markets: 'mercados', positions: 'posiciones',
-                leaderboard: 'ranking', admin: 'admin'
+                upcoming: 'próximos', leaderboard: 'ranking', admin: 'admin'
             };
             const kw = pageKeywords[page] || page;
             document.querySelectorAll('.nav-tab').forEach(t => {
@@ -1500,9 +1600,10 @@
             });
         }
         // Load data for the page
+        if (page === 'upcoming') loadUpcomingMarkets();
         if (page === 'positions' && currentUser) loadPositions();
         if (page === 'leaderboard') loadLeaderboard();
-if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
+        if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
     }
 
     // ─── Markets ─────────────────────────────────────────────
@@ -1687,24 +1788,33 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
     let countdownInterval = null;
     function startCountdownTimers() {
         if (countdownInterval) clearInterval(countdownInterval);
+        const pad = n => String(n).padStart(2, '0');
+        const fmtDiff = diff => {
+            const d = Math.floor(diff / 86400000);
+            const h = Math.floor((diff % 86400000) / 3600000);
+            const m = Math.floor((diff % 3600000) / 60000);
+            const s = Math.floor((diff % 60000) / 1000);
+            return `${pad(d)}d ${pad(h)}h ${pad(m)}m ${pad(s)}s`;
+        };
         function tick() {
             const now = Date.now();
+            // closes_at countdowns (active market cards + detail modal)
             document.querySelectorAll('.market-countdown').forEach(el => {
                 const closesAt = el.dataset.closesAt;
                 if (!closesAt) return;
                 const valueEl = el.querySelector('.countdown-value');
                 const diff = new Date(closesAt).getTime() - now;
-                if (diff <= 0) {
-                    el.classList.add('closed');
-                    valueEl.textContent = 'CERRADO';
-                    return;
-                }
-                const d = Math.floor(diff / 86400000);
-                const h = Math.floor((diff % 86400000) / 3600000);
-                const m = Math.floor((diff % 3600000) / 60000);
-                const s = Math.floor((diff % 60000) / 1000);
-                const pad = n => String(n).padStart(2, '0');
-                valueEl.textContent = `${pad(d)}d ${pad(h)}h ${pad(m)}m ${pad(s)}s`;
+                if (diff <= 0) { el.classList.add('closed'); valueEl.textContent = 'CERRADO'; return; }
+                valueEl.textContent = fmtDiff(diff);
+            });
+            // opens_at countdowns (upcoming market cards)
+            document.querySelectorAll('.upcoming-countdown').forEach(el => {
+                const opensAt = el.dataset.opensAt;
+                if (!opensAt) return;
+                const valueEl = el.querySelector('.countdown-value');
+                const diff = new Date(opensAt).getTime() - now;
+                if (diff <= 0) { valueEl.textContent = 'ABIERTO'; return; }
+                valueEl.textContent = fmtDiff(diff);
             });
         }
         tick();
@@ -1727,6 +1837,76 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
         document.getElementById('marketsContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // ─── Upcoming Markets ────────────────────────────────────
+
+    const watchedMarkets = new Set();
+
+    async function loadUpcomingMarkets() {
+        const container = document.getElementById('upcomingContainer');
+        try {
+            const res = await fetch(`${API}/events/upcoming`);
+            const markets = await res.json();
+
+            if (!Array.isArray(markets) || markets.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>Nuevos mercados llegando pronto.</h3>
+                        <p>Vuelve en unos días para ver los próximos contratos de predicción.</p>
+                    </div>`;
+                return;
+            }
+
+            const cards = markets.map(m => {
+                const isWatched = watchedMarkets.has(m.id);
+                const count = m.watch_count || 0;
+                return `
+                    <div class="upcoming-card">
+                        <div class="upcoming-badge">🔜 PRÓXIMO</div>
+                        <div class="market-title">${m.title}</div>
+                        ${m.resolution_source ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-bottom:0.25rem;">${m.resolution_source}</div>` : ''}
+                        <div class="upcoming-countdown" data-opens-at="${m.opens_at || ''}">
+                            <span class="countdown-label">Abre en: </span><span class="countdown-value">${m.opens_at ? '...' : '—'}</span>
+                        </div>
+                        <button class="watch-btn" id="watchBtn-${m.id}"
+                            onclick="watchMarket(${m.id})"
+                            ${isWatched ? 'disabled' : ''}>
+                            ${isWatched ? '✓ Anotado' : '🔔 Notifícame'}
+                        </button>
+                        <div class="watch-count" id="watchCount-${m.id}">${count} usuario${count !== 1 ? 's' : ''} esperando</div>
+                    </div>`;
+            }).join('');
+
+            container.innerHTML = `<div class="upcoming-grid">${cards}</div>`;
+            startCountdownTimers();
+        } catch (err) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>Error cargando próximos mercados</h3>
+                    <p>Intenta de nuevo más tarde.</p>
+                </div>`;
+        }
+    }
+
+    async function watchMarket(id) {
+        if (watchedMarkets.has(id)) return;
+        try {
+            const headers = currentUser ? authHeaders() : { 'Content-Type': 'application/json' };
+            const res = await fetch(`${API}/events/${id}/watch`, { method: 'POST', headers });
+            if (!res.ok) throw new Error('Watch failed');
+            const data = await res.json();
+            watchedMarkets.add(id);
+            const btn = document.getElementById(`watchBtn-${id}`);
+            if (btn) { btn.disabled = true; btn.textContent = '✓ Anotado'; }
+            const countEl = document.getElementById(`watchCount-${id}`);
+            if (countEl) {
+                const c = data.watch_count || 0;
+                countEl.textContent = `${c} usuario${c !== 1 ? 's' : ''} esperando`;
+            }
+        } catch (err) {
+            showToast('No se pudo registrar la notificación', true);
+        }
+    }
+
     // ─── Create Market (Admin) ───────────────────────────────
 
     function openNewMarketModal() {
@@ -1734,36 +1914,69 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
             showToast('Solo administradores pueden crear mercados.', true);
             return;
         }
+        // Reset modal state
+        document.getElementById('eventStatus').value = 'open';
+        toggleOpensAt();
         document.getElementById('newMarketModal').classList.add('active');
+    }
+
+    function toggleOpensAt() {
+        const status = document.getElementById('eventStatus').value;
+        const isUpcoming = status === 'upcoming';
+        document.getElementById('opensAtGroup').style.display = isUpcoming ? '' : 'none';
+        document.getElementById('closeTimeGroup').style.display = isUpcoming ? 'none' : '';
     }
 
     async function createMarket() {
         const title = document.getElementById('eventTitle').value.trim();
         const description = document.getElementById('eventDesc').value.trim();
+        const status = document.getElementById('eventStatus').value;
         const close_time = document.getElementById('eventCloseTime').value;
+        const opens_at = document.getElementById('eventOpensAt').value;
         const resolution_source = document.getElementById('eventSource').value.trim();
         const image_url = document.getElementById('eventImage').value.trim();
 
-        if (!title || !close_time) {
-            showToast('Título y fecha de cierre son requeridos', true);
+        if (!title) {
+            showToast('El título es requerido', true);
+            return;
+        }
+        if (status === 'upcoming' && !opens_at) {
+            showToast('La fecha de apertura es requerida para mercados próximos', true);
+            return;
+        }
+        if (status !== 'upcoming' && !close_time) {
+            showToast('La fecha de cierre es requerida', true);
             return;
         }
 
         try {
+            const body = { title, description, status, resolution_source, image_url };
+            if (status === 'upcoming') {
+                body.opens_at = opens_at;
+            } else {
+                body.close_time = close_time;
+            }
+
             const res = await fetch(`${API}/events`, {
                 method: 'POST',
                 headers: authHeaders(),
-                body: JSON.stringify({ title, description, close_time, resolution_source, image_url })
+                body: JSON.stringify(body)
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
 
             closeModal('newMarketModal');
-            showToast('¡Mercado creado exitosamente!');
-            loadEvents();
-            ['eventTitle','eventDesc','eventCloseTime','eventSource', 'eventImage'].forEach(id => {
+            showToast(status === 'upcoming' ? '¡Mercado próximo creado!' : '¡Mercado creado exitosamente!');
+            if (status === 'upcoming') {
+                loadUpcomingMarkets();
+            } else {
+                loadEvents();
+            }
+            ['eventTitle','eventDesc','eventCloseTime','eventOpensAt','eventSource','eventImage'].forEach(id => {
                 document.getElementById(id).value = '';
             });
+            document.getElementById('eventStatus').value = 'open';
+            toggleOpensAt();
         } catch (err) {
             showToast(err.message || 'Error creando el mercado', true);
         }
