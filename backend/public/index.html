@@ -63,6 +63,13 @@
             color: var(--accent);
             font-weight: 500;
         }
+        .coin-icon {
+            width: 14px;
+            height: 14px;
+            vertical-align: -2px;
+            flex-shrink: 0;
+            display: inline-block;
+        }
         .user-display {
             font-family: 'IBM Plex Mono', monospace;
             font-size: 0.8rem;
@@ -1191,6 +1198,7 @@
     // ─── Config ──────────────────────────────────────────────
     const API = window.location.origin;
     const SUPPORT_EMAIL = 'soporte@eventox.co';
+    const COIN_SVG = `<svg class="coin-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="6.5" fill="#F5C518" stroke="#9A6F00" stroke-width="1"/><circle cx="7" cy="7" r="4.5" fill="none" stroke="rgba(80,55,0,0.4)" stroke-width="0.75"/></svg>`;
 
     // ─── Auth State ──────────────────────────────────────────
     let authToken = localStorage.getItem('eventox_token');
@@ -1236,7 +1244,7 @@
         if (currentUser) {
             el.innerHTML = `
                 <div class="credits-display">
-                    CRÉDITOS: 🪙 <span class="credits-amount" id="userCredits">${currentUser.credits.toLocaleString()}</span>
+                    CRÉDITOS: ${COIN_SVG} <span class="credits-amount" id="userCredits">${currentUser.credits.toLocaleString()}</span>
                 </div>
                 <div class="user-display">${currentUser.username}</div>
                 <button class="btn btn-small" onclick="claimDailyBonus()">BONO DIARIO</button>
@@ -1677,8 +1685,8 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
         selectedEventId = eventId;
         selectedPosition = position;
         document.getElementById('betModalTitle').textContent = event.title;
-        document.getElementById('yesPriceDisplay').textContent = `${event.yes_price || 50} créditos`;
-        document.getElementById('noPriceDisplay').textContent = `${event.no_price || 50} créditos`;
+        document.getElementById('yesPriceDisplay').innerHTML = `${COIN_SVG} ${event.yes_price || 50}`;
+        document.getElementById('noPriceDisplay').innerHTML = `${COIN_SVG} ${event.no_price || 50}`;
         selectPosition(position);
         document.getElementById('betModal').classList.add('active');
     }
@@ -1937,11 +1945,11 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
             </div>
             <div class="sell-preview-row">
                 <span style="color:var(--muted);">Recibirás</span>
-                <span>${creditsOut} créditos</span>
+                <span>${COIN_SVG} ${creditsOut}</span>
             </div>
             <div class="sell-preview-row" style="border-top:1px solid var(--border); margin-top:0.4rem; padding-top:0.4rem;">
                 <span style="color:var(--muted);">PnL</span>
-                <span class="${pnlClass}">${pnl >= 0 ? '+' : ''}${pnl} créditos</span>
+                <span class="${pnlClass}">${pnl >= 0 ? '+' : ''}${pnl}</span>
             </div>`;
     }
 
@@ -1998,7 +2006,7 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
                     <div class="leaderboard-item">
                         <span class="${rankClass}">#${rank}</span>
                         <span class="${nameClass}">${l.username}${isYou ? ' (tú)' : ''}</span>
-                        <span class="lb-credits">${l.credits.toLocaleString()}¢</span>
+                        <span class="lb-credits">${COIN_SVG} ${l.credits.toLocaleString()}</span>
                     </div>`;
             }).join('');
 
@@ -2031,7 +2039,7 @@ if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
                     <div class="tt-row">
                         <span class="tt-medal ${mc}">#${rank}</span>
                         <span class="tt-name ${mc}${isYou ? ' is-you' : ''}">${l.username}${isYou ? ' (tú)' : ''}</span>
-                        <span class="tt-creds">${l.credits.toLocaleString()}¢</span>
+                        <span class="tt-creds">${COIN_SVG} ${l.credits.toLocaleString()}</span>
                     </div>`;
             }).join('');
             row.style.display = '';
