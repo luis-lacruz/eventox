@@ -1054,6 +1054,86 @@
             .hot-card { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.04); }
             .hot-card:last-child { border-bottom: none; }
         }
+
+        /* THEME TOGGLE BUTTON */
+        .theme-toggle {
+            font-size: 1rem;
+            line-height: 1;
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.3rem 0.5rem;
+            cursor: pointer;
+            transition: border-color 0.15s;
+            border-radius: 4px;
+        }
+        .theme-toggle:hover { border-color: var(--accent); }
+
+        /* ── LIGHT MODE ─────────────────────────────────────────── */
+        body.light-mode {
+            --bg:     #F5F5F5;
+            --bg2:    #FFFFFF;
+            --bg3:    #EFEFEF;
+            --text:   #0A0A0A;
+            --muted:  #555555;
+            --border: #E0E0E0;
+        }
+        /* Header & nav use white, not --bg */
+        body.light-mode header {
+            background: #FFFFFF;
+            border-bottom-color: #E0E0E0;
+        }
+        body.light-mode .nav-tabs {
+            background: #FFFFFF;
+            border-bottom-color: #E0E0E0;
+        }
+        /* Ticker gets its own light bg */
+        body.light-mode .ticker {
+            background: #F0F0F0;
+            border-bottom-color: #E0E0E0;
+        }
+        /* Market cards get a subtle elevation */
+        body.light-mode .market-card {
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        body.light-mode .market-card:hover { background: #F9F9F9; }
+        /* Market tag — boost accent opacity on white */
+        body.light-mode .market-tag {
+            background: rgba(204,255,0,0.18);
+        }
+        /* Card image gradient fades to white */
+        body.light-mode .market-card-img::after {
+            background: linear-gradient(transparent, #FFFFFF);
+        }
+        /* Card fallback gradients — lighten for white bg */
+        body.light-mode .market-card-fallback.politics  { background: linear-gradient(135deg, #d8daf0, #cdd5e8); }
+        body.light-mode .market-card-fallback.economics { background: linear-gradient(135deg, #d0e8d4, #cce0d8); }
+        body.light-mode .market-card-fallback.security  { background: linear-gradient(135deg, #e8d4d4, #e0cccc); }
+        /* Dashboard widgets — elevation instead of glow */
+        body.light-mode .dashboard-widget {
+            border-color: rgba(0,0,0,0.08);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        /* Swap transparent-white internal borders → transparent-black */
+        body.light-mode .widget-header        { border-bottom-color: rgba(0,0,0,0.07); }
+        body.light-mode .hot-card             { border-right-color:  rgba(0,0,0,0.07); }
+        body.light-mode .hot-card:hover       { background: rgba(0,0,0,0.02); }
+        body.light-mode .tt-row               { border-bottom-color: rgba(0,0,0,0.07); }
+        body.light-mode .tt-row:hover         { background: rgba(0,0,0,0.02); }
+        body.light-mode .pos-row              { border-bottom-color: rgba(0,0,0,0.07); }
+        body.light-mode .pos-row:hover        { background: rgba(0,0,0,0.02); }
+        /* Upcoming cards — keep desaturated feel, no brightness crush */
+        body.light-mode .upcoming-card        { filter: saturate(0.65); }
+        body.light-mode .upcoming-card:hover  { filter: saturate(0.85); background: #F9F9F9; }
+        body.light-mode .upcoming-prices-placeholder { border-color: rgba(0,0,0,0.1); }
+        /* Mobile responsive hot-card border swap */
+        @media (max-width: 600px) {
+            body.light-mode .hot-card { border-bottom-color: rgba(0,0,0,0.07); }
+        }
+        /* Modal overlay — slightly lighter scrim */
+        body.light-mode .modal-overlay { background: rgba(0,0,0,0.5); }
+        /* Toast text color needs to be explicit */
+        body.light-mode .toast { color: var(--text); }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -1062,8 +1142,11 @@
 <!-- HEADER -->
 <header>
     <div class="logo" onclick="showPage('markets')">Evento<span>X</span></div>
-    <div class="header-right" id="headerRight">
-        <!-- Populated by JS based on auth state -->
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+        <button id="themeToggle" class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema">🌙</button>
+        <div class="header-right" id="headerRight">
+            <!-- Populated by JS based on auth state -->
+        </div>
     </div>
 </header>
 
@@ -1395,6 +1478,20 @@
     const API = window.location.origin;
     const SUPPORT_EMAIL = 'soporte@eventox.co';
     const COIN_SVG = `<svg class="coin-icon" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="6.5" fill="#F5C518" stroke="#9A6F00" stroke-width="1"/><circle cx="7" cy="7" r="4.5" fill="none" stroke="rgba(80,55,0,0.4)" stroke-width="0.75"/></svg>`;
+
+    // ─── Theme ───────────────────────────────────────────────
+    function applyTheme(light) {
+        document.body.classList.toggle('light-mode', light);
+        const btn = document.getElementById('themeToggle');
+        if (btn) btn.textContent = light ? '☀️' : '🌙';
+    }
+    function toggleTheme() {
+        const isLight = document.body.classList.contains('light-mode');
+        localStorage.setItem('eventox_theme', isLight ? 'dark' : 'light');
+        applyTheme(!isLight);
+    }
+    // Apply saved preference immediately — runs before first render
+    applyTheme(localStorage.getItem('eventox_theme') === 'light');
 
     // ─── Auth State ──────────────────────────────────────────
     let authToken = localStorage.getItem('eventox_token');
