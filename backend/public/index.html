@@ -547,6 +547,23 @@
             margin-top: 0.4rem;
             text-align: center;
         }
+        .upcoming-badge.badge-coming {
+            color: #9ab86a;
+            border-color: rgba(154,184,106,0.3);
+            background: rgba(154,184,106,0.07);
+        }
+        .upcoming-prices-placeholder {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--muted);
+            opacity: 0.45;
+            text-align: center;
+            padding: 0.55rem 0;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            border: 1px dashed rgba(255,255,255,0.08);
+            margin: 0.75rem 0 0;
+        }
         select.form-input { cursor: pointer; }
 
         /* PRICE BAR */
@@ -1841,50 +1858,85 @@
 
     const watchedMarkets = new Set();
 
+    const SHOWCASE_MARKETS = [
+        {
+            id: 'showcase-3',
+            title: '¿Ganará Paloma Valencia la primera vuelta presidencial del 31 de mayo de 2026?',
+            opens_at: '2026-05-01T00:00:00',
+            resolution_source: 'Registraduría Nacional del Estado Civil'
+        },
+        {
+            id: 'showcase-1',
+            title: '¿Habrá segunda vuelta en las elecciones presidenciales del 21 de junio de 2026?',
+            opens_at: '2026-05-31T23:59:00',
+            resolution_source: 'Registraduría Nacional del Estado Civil'
+        },
+        {
+            id: 'showcase-2',
+            title: '¿Superará el dólar los $4,500 COP antes del 30 de junio de 2026?',
+            opens_at: '2026-06-01T00:00:00',
+            resolution_source: 'Superintendencia Financiera - TRM Oficial'
+        }
+    ];
+
+    function renderShowcaseCards() {
+        return SHOWCASE_MARKETS.map(m => `
+            <div class="upcoming-card">
+                <div class="upcoming-badge badge-coming">PRÓXIMO</div>
+                <div class="market-title">${m.title}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-bottom:0.25rem;">${m.resolution_source}</div>
+                <div class="upcoming-countdown" data-opens-at="${m.opens_at}">
+                    <span class="countdown-label">Abre en: </span><span class="countdown-value">...</span>
+                </div>
+                <div class="upcoming-prices-placeholder">Próximamente</div>
+                <button class="watch-btn" onclick="notifyShowcase()">🔔 Notifícame</button>
+            </div>`).join('');
+    }
+
     async function loadUpcomingMarkets() {
         const container = document.getElementById('upcomingContainer');
+        const showcaseCards = renderShowcaseCards();
+
         try {
             const res = await fetch(`${API}/events/upcoming`);
             const markets = await res.json();
 
-            if (!Array.isArray(markets) || markets.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <h3>Nuevos mercados llegando pronto.</h3>
-                        <p>Vuelve en unos días para ver los próximos contratos de predicción.</p>
-                    </div>`;
-                return;
-            }
+            const dbCards = Array.isArray(markets) && markets.length > 0
+                ? markets.map(m => {
+                    const isWatched = watchedMarkets.has(m.id);
+                    const count = m.watch_count || 0;
+                    return `
+                        <div class="upcoming-card">
+                            <div class="upcoming-badge">🔜 PRÓXIMO</div>
+                            <div class="market-title">${m.title}</div>
+                            ${m.resolution_source ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-bottom:0.25rem;">${m.resolution_source}</div>` : ''}
+                            <div class="upcoming-countdown" data-opens-at="${m.opens_at || ''}">
+                                <span class="countdown-label">Abre en: </span><span class="countdown-value">${m.opens_at ? '...' : '—'}</span>
+                            </div>
+                            <button class="watch-btn" id="watchBtn-${m.id}"
+                                onclick="watchMarket(${m.id})"
+                                ${isWatched ? 'disabled' : ''}>
+                                ${isWatched ? '✓ Anotado' : '🔔 Notifícame'}
+                            </button>
+                            <div class="watch-count" id="watchCount-${m.id}">${count} usuario${count !== 1 ? 's' : ''} esperando</div>
+                        </div>`;
+                }).join('')
+                : '';
 
-            const cards = markets.map(m => {
-                const isWatched = watchedMarkets.has(m.id);
-                const count = m.watch_count || 0;
-                return `
-                    <div class="upcoming-card">
-                        <div class="upcoming-badge">🔜 PRÓXIMO</div>
-                        <div class="market-title">${m.title}</div>
-                        ${m.resolution_source ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-bottom:0.25rem;">${m.resolution_source}</div>` : ''}
-                        <div class="upcoming-countdown" data-opens-at="${m.opens_at || ''}">
-                            <span class="countdown-label">Abre en: </span><span class="countdown-value">${m.opens_at ? '...' : '—'}</span>
-                        </div>
-                        <button class="watch-btn" id="watchBtn-${m.id}"
-                            onclick="watchMarket(${m.id})"
-                            ${isWatched ? 'disabled' : ''}>
-                            ${isWatched ? '✓ Anotado' : '🔔 Notifícame'}
-                        </button>
-                        <div class="watch-count" id="watchCount-${m.id}">${count} usuario${count !== 1 ? 's' : ''} esperando</div>
-                    </div>`;
-            }).join('');
-
-            container.innerHTML = `<div class="upcoming-grid">${cards}</div>`;
+            container.innerHTML = `<div class="upcoming-grid">${showcaseCards}${dbCards}</div>`;
             startCountdownTimers();
         } catch (err) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <h3>Error cargando próximos mercados</h3>
-                    <p>Intenta de nuevo más tarde.</p>
-                </div>`;
+            container.innerHTML = `<div class="upcoming-grid">${showcaseCards}</div>`;
+            startCountdownTimers();
         }
+    }
+
+    function notifyShowcase() {
+        if (!currentUser) {
+            openAuthModal('login');
+            return;
+        }
+        showToast('Las notificaciones para este mercado estarán disponibles próximamente.');
     }
 
     async function watchMarket(id) {
