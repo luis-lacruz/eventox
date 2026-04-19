@@ -1071,45 +1071,55 @@
 
         /* ── LIGHT MODE ─────────────────────────────────────────── */
         body.light-mode {
-            --bg:     #F5F5F5;
-            --bg2:    #FFFFFF;
-            --bg3:    #EFEFEF;
+            --bg:     #EFEFEA;
+            --bg2:    #FAFAF7;
+            --bg3:    #F0F0EB;
             --text:   #0A0A0A;
             --muted:  #555555;
-            --border: #E0E0E0;
+            --border: #DDDDDD;
+            --accent: #6B8500;   /* #CCFF00 as text is illegible on light bg */
         }
-        /* Header & nav use white, not --bg */
+        /* Header & nav: slightly lighter than page bg */
         body.light-mode header {
-            background: #FFFFFF;
-            border-bottom-color: #E0E0E0;
+            background: #FAFAF7;
+            border-bottom-color: #DDDDDD;
         }
         body.light-mode .nav-tabs {
-            background: #FFFFFF;
-            border-bottom-color: #E0E0E0;
+            background: #FAFAF7;
+            border-bottom-color: #DDDDDD;
         }
-        /* Ticker gets its own light bg */
+        /* Ticker */
         body.light-mode .ticker {
-            background: #F0F0F0;
-            border-bottom-color: #E0E0E0;
+            background: #E8E8E3;
+            border-bottom-color: #D0D0CB;
         }
-        /* Market cards get a subtle elevation */
+        body.light-mode .ticker-item          { color: #111111; }
+        body.light-mode .ticker-item .label   { color: #111111; }
+        body.light-mode .ticker-item .yes-val { color: #007A3D; }
+        body.light-mode .ticker-item .no-val  { color: #B00020; }
+        /* Market cards: soft elevation */
         body.light-mode .market-card {
             box-shadow: 0 1px 4px rgba(0,0,0,0.06);
         }
-        body.light-mode .market-card:hover { background: #F9F9F9; }
-        /* Market tag — boost accent opacity on white */
+        body.light-mode .market-card:hover { background: #F5F5F0; }
+        /* Market tag: use dark-olive tint bg */
         body.light-mode .market-tag {
-            background: rgba(204,255,0,0.18);
+            background: rgba(107,133,0,0.1);
         }
-        /* Card image gradient fades to white */
+        /* Card image gradient fades to page bg */
         body.light-mode .market-card-img::after {
-            background: linear-gradient(transparent, #FFFFFF);
+            background: linear-gradient(transparent, #EFEFEA);
         }
-        /* Card fallback gradients — lighten for white bg */
+        /* Card fallback gradients — pastel for light bg */
         body.light-mode .market-card-fallback.politics  { background: linear-gradient(135deg, #d8daf0, #cdd5e8); }
         body.light-mode .market-card-fallback.economics { background: linear-gradient(135deg, #d0e8d4, #cce0d8); }
         body.light-mode .market-card-fallback.security  { background: linear-gradient(135deg, #e8d4d4, #e0cccc); }
-        /* Dashboard widgets — elevation instead of glow */
+        /* Keep #CCFF00 as fill on badges and primary CTA — never as text */
+        body.light-mode .hot-badge         { background: #CCFF00; color: #111111; }
+        body.light-mode .btn-primary       { background: #CCFF00; border-color: #CCFF00; color: #111111; }
+        body.light-mode .btn-primary:hover { background: #b3e000; border-color: #b3e000; color: #111111; }
+        body.light-mode .market-card::after { background: #CCFF00; }
+        /* Dashboard widgets: real elevation */
         body.light-mode .dashboard-widget {
             border-color: rgba(0,0,0,0.08);
             box-shadow: 0 2px 12px rgba(0,0,0,0.08);
@@ -1122,18 +1132,20 @@
         body.light-mode .tt-row:hover         { background: rgba(0,0,0,0.02); }
         body.light-mode .pos-row              { border-bottom-color: rgba(0,0,0,0.07); }
         body.light-mode .pos-row:hover        { background: rgba(0,0,0,0.02); }
-        /* Upcoming cards — keep desaturated feel, no brightness crush */
+        /* Upcoming cards: keep desaturated, no brightness crush */
         body.light-mode .upcoming-card        { filter: saturate(0.65); }
-        body.light-mode .upcoming-card:hover  { filter: saturate(0.85); background: #F9F9F9; }
+        body.light-mode .upcoming-card:hover  { filter: saturate(0.85); background: #F5F5F0; }
         body.light-mode .upcoming-prices-placeholder { border-color: rgba(0,0,0,0.1); }
-        /* Mobile responsive hot-card border swap */
+        /* Mobile: hot-card border swap */
         @media (max-width: 600px) {
             body.light-mode .hot-card { border-bottom-color: rgba(0,0,0,0.07); }
         }
-        /* Modal overlay — slightly lighter scrim */
+        /* Modal overlay */
         body.light-mode .modal-overlay { background: rgba(0,0,0,0.5); }
-        /* Toast text color needs to be explicit */
-        body.light-mode .toast { color: var(--text); }
+        /* Toast */
+        body.light-mode .toast { color: var(--text); border-left-color: #6B8500; }
+        /* Price chart bg */
+        body.light-mode .detail-chart-wrap { background: #F0F0EB; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -2883,6 +2895,7 @@
                     hour: '2-digit', minute: '2-digit'
                 })
             );
+            const cc = getChartColors();
             _detailChart = new Chart(canvas, {
                 type: 'line',
                 data: {
@@ -2890,10 +2903,10 @@
                     datasets: [{
                         label: 'SÍ %',
                         data: prices,
-                        borderColor: '#e8ff47',
+                        borderColor: cc.line,
                         borderWidth: 2,
                         fill: true,
-                        backgroundColor: 'rgba(232,255,71,0.07)',
+                        backgroundColor: cc.fill,
                         pointRadius: 0,
                         pointHoverRadius: 4,
                         tension: 0.3
@@ -2907,11 +2920,11 @@
                         legend: { display: false },
                         tooltip: {
                             enabled: true,
-                            backgroundColor: '#1a1a1f',
-                            borderColor: '#1f1f2a',
+                            backgroundColor: cc.tooltipBg,
+                            borderColor: cc.tooltipBorder,
                             borderWidth: 1,
-                            titleColor: '#6b6b85',
-                            bodyColor: '#e8ff47',
+                            titleColor: cc.tooltipTitle,
+                            bodyColor: cc.tooltipBody,
                             titleFont: { family: "'IBM Plex Mono', monospace", size: 10 },
                             bodyFont:  { family: "'IBM Plex Mono', monospace", size: 12, weight: '600' },
                             callbacks: { label: ctx => ` SÍ ${ctx.parsed.y}¢` }
@@ -2920,9 +2933,9 @@
                     scales: {
                         x: {
                             display: true,
-                            grid: { color: '#1f1f2a', drawBorder: false },
+                            grid: { color: cc.grid, drawBorder: false },
                             ticks: {
-                                color: '#6b6b85',
+                                color: cc.ticks,
                                 font: { family: "'IBM Plex Mono', monospace", size: 9 },
                                 maxTicksLimit: 5,
                                 maxRotation: 0
@@ -2933,9 +2946,9 @@
                             min: yMin,
                             max: yMax,
                             position: 'right',
-                            grid: { color: '#1f1f2a', drawBorder: false },
+                            grid: { color: cc.grid, drawBorder: false },
                             ticks: {
-                                color: '#6b6b85',
+                                color: cc.ticks,
                                 font: { family: "'IBM Plex Mono', monospace", size: 9 },
                                 maxTicksLimit: 5,
                                 callback: v => v + '¢'
@@ -2951,6 +2964,20 @@
     }
 
     // ─── Price History Charts ────────────────────────────────
+
+    function getChartColors() {
+        const light = document.body.classList.contains('light-mode');
+        return {
+            line:          light ? '#4A7C00'           : '#e8ff47',
+            fill:          light ? 'rgba(74,124,0,0.08)'  : 'rgba(232,255,71,0.07)',
+            grid:          light ? '#DDDDDD'           : '#1f1f2a',
+            ticks:         light ? '#333333'           : '#6b6b85',
+            tooltipBg:     light ? '#FAFAF7'           : '#1a1a1f',
+            tooltipBorder: light ? '#DDDDDD'           : '#1f1f2a',
+            tooltipTitle:  light ? '#555555'           : '#6b6b85',
+            tooltipBody:   light ? '#4A7C00'           : '#e8ff47',
+        };
+    }
 
     const _charts = {};
 
@@ -2971,16 +2998,17 @@
                     _charts[event.id].destroy();
                     delete _charts[event.id];
                 }
+                const cc = getChartColors();
                 _charts[event.id] = new Chart(canvas, {
                     type: 'line',
                     data: {
                         labels: history.map(() => ''),
                         datasets: [{
                             data: history.map(h => h.yes_price),
-                            borderColor: '#e8ff47',
+                            borderColor: cc.line,
                             borderWidth: 1.5,
                             fill: true,
-                            backgroundColor: 'rgba(232,255,71,0.07)',
+                            backgroundColor: cc.fill,
                             pointRadius: 0,
                             tension: 0.3
                         }]
