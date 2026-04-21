@@ -9,7 +9,12 @@
  */
 
 const path = require("path");
+const fs = require("fs");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
+
+// Ensure uploads directory exists (Railway filesystem may not persist it)
+const uploadsDir = path.join(__dirname, "public/uploads");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const express = require("express");
 const cors = require("cors");
