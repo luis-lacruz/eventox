@@ -21,7 +21,8 @@ const jwt = require("jsonwebtoken");  // Token-based auth — lets users stay lo
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "eventox-dev-secret-change-in-production";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) { console.error("FATAL: JWT_SECRET is not set in .env — server refused to start."); process.exit(1); }
 
 // SALT_ROUNDS controls how many times bcrypt re-hashes the password.
 // Higher = more secure but slower. 10 is the standard for most apps.
@@ -75,12 +76,22 @@ function authenticateToken(req, res, next) {
 }
 
 // Admin-only middleware — use AFTER authenticateToken
-// Checks if the logged-in user has is_admin = true
-function requireAdmin(req, res, next) {
-  if (!req.user.is_admin) {
-    return res.status(403).json({ error: "Admin access required." });
+// Checks if the logged-in user has is_admin = true — verified against the DB,
+// not the JWT, so revoked admin tokens are rejected immediately.
+async function requireAdmin(req, res, next) {
+  try {
+    const result = await pool.query(
+      "SELECT is_admin FROM users WHERE id = $1",
+      [req.user.id]
+    );
+    if (!result.rows[0]?.is_admin) {
+      return res.status(403).json({ error: "Admin access required." });
+    }
+    next();
+  } catch (err) {
+    console.error("requireAdmin error:", err.message);
+    return res.status(500).json({ error: "Error verifying admin status." });
   }
-  next();
 }
 
 // ─── Health Checks ───────────────────────────────────────────
@@ -325,6 +336,9 @@ app.post("/events", authenticateToken, requireAdmin, async (req, res) => {
   const { title, description, category, resolution_source, close_time, image_url, status, opens_at } =
     req.body;
 
+  const ALLOWED_CATEGORIES = ['politics', 'economics', 'security', 'sports'];
+  const safeCategory = ALLOWED_CATEGORIES.includes(category) ? category : 'politics';
+
   if (!title) {
     return res.status(400).json({ error: "Title is required" });
   }
@@ -339,7 +353,7 @@ app.post("/events", authenticateToken, requireAdmin, async (req, res) => {
       [
         title,
         description || null,
-        category || "politics",
+        safeCategory,
         resolution_source || null,
         close_time || null,
         image_url || null,
@@ -373,24 +387,29 @@ app.post("/events/:id/resolve", authenticateToken, requireAdmin, async (req, res
     return res.status(400).json({ error: 'Result must be "yes" or "no".' });
   }
 
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
     // Check event exists and is still open
-    const eventResult = await pool.query("SELECT * FROM events WHERE id = $1", [eventId]);
+    const eventResult = await client.query("SELECT * FROM events WHERE id = $1", [eventId]);
     if (eventResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: "Market not found." });
     }
     if (eventResult.rows[0].status === 'resolved') {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: "Market already resolved." });
     }
 
     // Mark as resolved
-    await pool.query(
+    await client.query(
       "UPDATE events SET status = 'resolved', resolved = true, outcome = $1 WHERE id = $2",
       [result.toLowerCase(), eventId]
     );
 
     // Pay out winning open positions (entry-price aware: payout = amount × 100 / entry_price)
-    const winningBets = await pool.query(
+    const winningBets = await client.query(
       `SELECT id, user_id, amount, entry_price
        FROM bets WHERE event_id = $1 AND position = $2 AND status = 'OPEN'`,
       [eventId, result.toLowerCase()]
@@ -401,42 +420,46 @@ app.post("/events/:id/resolve", authenticateToken, requireAdmin, async (req, res
       const ep = bet.entry_price || 50;
       const payout = Math.round(bet.amount * 100 / ep); // at ep=50 this is 2× as before
       const pnl = payout - bet.amount;
-      await pool.query(
+      await client.query(
         "UPDATE users SET credits = credits + $1 WHERE id = $2",
         [payout, bet.user_id]
       );
-      await pool.query(
+      await client.query(
         "UPDATE bets SET status = 'CLOSED', pnl = $1 WHERE id = $2",
         [pnl, bet.id]
       );
       logTransaction(bet.user_id, parseInt(eventId), 'winnings', payout,
-        `Ganancia en "${eventResult.rows[0].title}" (${result.toUpperCase()})`);
+        `Ganancia en "${eventResult.rows[0].title}" (${result.toUpperCase()})`, client);
       totalPaid += payout;
     }
 
     // Close losing open positions (no payout, record negative pnl)
-    const losingBets = await pool.query(
+    const losingBets = await client.query(
       `SELECT user_id, amount FROM bets WHERE event_id = $1 AND position != $2 AND status = 'OPEN'`,
       [eventId, result.toLowerCase()]
     );
-    await pool.query(
+    await client.query(
       `UPDATE bets SET status = 'CLOSED', pnl = -amount
        WHERE event_id = $1 AND position != $2 AND status = 'OPEN'`,
       [eventId, result.toLowerCase()]
     );
     for (const lb of losingBets.rows) {
       logTransaction(lb.user_id, parseInt(eventId), 'loss', lb.amount,
-        `Pérdida en "${eventResult.rows[0].title}" (${result.toUpperCase()})`);
+        `Pérdida en "${eventResult.rows[0].title}" (${result.toUpperCase()})`, client);
     }
 
+    await client.query('COMMIT');
     res.json({
       message: `Mercado resuelto como ${result.toUpperCase()}.`,
       winners: winningBets.rows.length,
       total_paid: totalPaid,
     });
   } catch (err) {
-    console.error("Resolve market error:", err.message);
-    res.status(500).json({ error: "Failed to resolve market." });
+    await client.query('ROLLBACK');
+    console.error('Resolution error:', err.message);
+    res.status(500).json({ error: "Error al resolver el mercado." });
+  } finally {
+    client.release();
   }
 });
 
@@ -446,9 +469,9 @@ app.post("/events/:id/resolve", authenticateToken, requireAdmin, async (req, res
 
 // ─── Helpers: Price History & Transaction Log ────────────────
 
-async function recordPriceHistory(eventId, yesPrice, noPrice) {
+async function recordPriceHistory(eventId, yesPrice, noPrice, db = pool) {
   try {
-    await pool.query(
+    await db.query(
       'INSERT INTO price_history (event_id, yes_price, no_price) VALUES ($1, $2, $3)',
       [eventId, yesPrice, noPrice]
     );
@@ -457,9 +480,9 @@ async function recordPriceHistory(eventId, yesPrice, noPrice) {
   }
 }
 
-async function logTransaction(userId, eventId, type, amount, description) {
+async function logTransaction(userId, eventId, type, amount, description, db = pool) {
   try {
-    await pool.query(
+    await db.query(
       'INSERT INTO transactions (user_id, event_id, type, amount, description) VALUES ($1, $2, $3, $4, $5)',
       [userId, eventId, type, amount, description]
     );
@@ -474,17 +497,17 @@ async function logTransaction(userId, eventId, type, amount, description) {
  * Buying NO (or selling YES) pushes yes_price down.
  * Impact: 1¢ per 100 credits. yes_price + no_price always = 100.
  */
-async function updatePrices(eventId, side, amount, isBuy) {
+async function updatePrices(eventId, side, amount, isBuy, db = pool) {
   const impact = Math.max(1, Math.floor(amount / 100));
   const direction = (side === "yes") === isBuy ? 1 : -1;
-  const evRes = await pool.query("SELECT yes_price FROM events WHERE id = $1", [eventId]);
+  const evRes = await db.query("SELECT yes_price FROM events WHERE id = $1", [eventId]);
   if (evRes.rows.length === 0) return;
   const newYes = Math.max(1, Math.min(99, evRes.rows[0].yes_price + impact * direction));
-  await pool.query(
+  await db.query(
     "UPDATE events SET yes_price = $1, no_price = $2 WHERE id = $3",
     [newYes, 100 - newYes, eventId]
   );
-  recordPriceHistory(eventId, newYes, 100 - newYes);
+  recordPriceHistory(eventId, newYes, 100 - newYes, db);
 }
 
 /**
@@ -494,7 +517,13 @@ async function updatePrices(eventId, side, amount, isBuy) {
  */
 app.post("/bets", authenticateToken, async (req, res) => {
   const { event_id, position, amount } = req.body;
-  const betAmount = amount || 100;
+  const betAmount = parseInt(amount, 10);
+  if (!Number.isInteger(betAmount) || betAmount < 1) {
+    return res.status(400).json({ error: "El monto debe ser un número entero positivo." });
+  }
+  if (betAmount > 10000) {
+    return res.status(400).json({ error: "El monto máximo por apuesta es 10,000 créditos." });
+  }
 
   if (!event_id || !position) {
     return res.status(400).json({ error: "event_id and position are required" });
@@ -504,14 +533,19 @@ app.post("/bets", authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Position must be "yes" or "no"' });
   }
 
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
     // Get event to verify it's open and read current price
-    const eventResult = await pool.query("SELECT * FROM events WHERE id = $1", [event_id]);
+    const eventResult = await client.query("SELECT * FROM events WHERE id = $1", [event_id]);
     if (eventResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: "Market not found." });
     }
     const event = eventResult.rows[0];
     if (event.status !== "open") {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: "Market is closed." });
     }
 
@@ -520,13 +554,14 @@ app.post("/bets", authenticateToken, async (req, res) => {
       : (event.no_price || 50);
 
     // Check user's current credits
-    const userResult = await pool.query(
+    const userResult = await client.query(
       "SELECT credits FROM users WHERE id = $1",
       [req.user.id]
     );
     const userCredits = userResult.rows[0].credits;
 
     if (userCredits < betAmount) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         error: "Insufficient credits.",
         credits: userCredits,
@@ -535,13 +570,13 @@ app.post("/bets", authenticateToken, async (req, res) => {
     }
 
     // Deduct credits from user
-    await pool.query(
+    await client.query(
       "UPDATE users SET credits = credits - $1 WHERE id = $2",
       [betAmount, req.user.id]
     );
 
     // Record the position with entry price
-    const result = await pool.query(
+    const result = await client.query(
       `INSERT INTO bets (event_id, user_id, position, amount, entry_price, status)
        VALUES ($1, $2, $3, $4, $5, 'OPEN')
        RETURNING *`,
@@ -549,22 +584,27 @@ app.post("/bets", authenticateToken, async (req, res) => {
     );
 
     // Move market price
-    await updatePrices(event_id, position.toLowerCase(), betAmount, true);
+    await updatePrices(event_id, position.toLowerCase(), betAmount, true, client);
     logTransaction(req.user.id, event_id, 'bet_placed', betAmount,
-      `${position.toUpperCase()} en "${event.title}" a ${entryPrice}¢`);
+      `${position.toUpperCase()} en "${event.title}" a ${entryPrice}¢`, client);
 
     // Return bet plus updated prices so the frontend can refresh immediately
-    const updatedEvent = await pool.query(
+    const updatedEvent = await client.query(
       "SELECT yes_price, no_price FROM events WHERE id = $1", [event_id]
     );
+
+    await client.query('COMMIT');
     res.status(201).json({
       ...result.rows[0],
       yes_price: updatedEvent.rows[0].yes_price,
       no_price: updatedEvent.rows[0].no_price,
     });
   } catch (err) {
-    console.error("Error placing bet:", err.message);
-    res.status(500).json({ error: "Failed to place position" });
+    await client.query('ROLLBACK');
+    console.error('Bet placement error:', err.message);
+    res.status(500).json({ error: "Error al procesar la apuesta." });
+  } finally {
+    client.release();
   }
 });
 
@@ -580,24 +620,31 @@ app.post("/bets/:id/sell", authenticateToken, async (req, res) => {
   const betId = req.params.id;
   const { sell_amount } = req.body;
 
+  const client = await pool.connect();
   try {
-    const betResult = await pool.query("SELECT * FROM bets WHERE id = $1", [betId]);
+    await client.query('BEGIN');
+
+    const betResult = await client.query("SELECT * FROM bets WHERE id = $1", [betId]);
     if (betResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: "Position not found." });
     }
     const bet = betResult.rows[0];
 
     if (bet.user_id !== req.user.id) {
+      await client.query('ROLLBACK');
       return res.status(403).json({ error: "Not your position." });
     }
     if (bet.status !== "OPEN") {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: "Position already closed." });
     }
     if (bet.amount <= 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: "Nothing left to sell." });
     }
 
-    const eventResult = await pool.query(
+    const eventResult = await client.query(
       "SELECT yes_price, no_price, title FROM events WHERE id = $1", [bet.event_id]
     );
     const event = eventResult.rows[0];
@@ -614,7 +661,7 @@ app.post("/bets/:id/sell", authenticateToken, async (req, res) => {
     const pnlDelta = creditsOut - sellAmount;
 
     // Pay user
-    await pool.query(
+    await client.query(
       "UPDATE users SET credits = credits + $1 WHERE id = $2",
       [creditsOut, req.user.id]
     );
@@ -622,23 +669,24 @@ app.post("/bets/:id/sell", authenticateToken, async (req, res) => {
     // Update the bet
     const newAmount = bet.amount - sellAmount;
     if (newAmount <= 0) {
-      await pool.query(
+      await client.query(
         "UPDATE bets SET amount = 0, status = 'CLOSED', pnl = $1 WHERE id = $2",
         [pnlDelta, betId]
       );
     } else {
-      await pool.query("UPDATE bets SET amount = $1 WHERE id = $2", [newAmount, betId]);
+      await client.query("UPDATE bets SET amount = $1 WHERE id = $2", [newAmount, betId]);
     }
 
     // Move market price back (selling = inverse direction of buying)
-    await updatePrices(bet.event_id, bet.position, sellAmount, false);
+    await updatePrices(bet.event_id, bet.position, sellAmount, false, client);
     logTransaction(req.user.id, bet.event_id, 'sell', creditsOut,
-      `Venta ${bet.position.toUpperCase()} en "${event.title}" (PnL: ${pnlDelta >= 0 ? '+' : ''}${pnlDelta})`);
+      `Venta ${bet.position.toUpperCase()} en "${event.title}" (PnL: ${pnlDelta >= 0 ? '+' : ''}${pnlDelta})`, client);
 
-    const userResult = await pool.query(
+    const userResult = await client.query(
       "SELECT credits FROM users WHERE id = $1", [req.user.id]
     );
 
+    await client.query('COMMIT');
     res.json({
       pnl: pnlDelta,
       credits_out: creditsOut,
@@ -647,8 +695,11 @@ app.post("/bets/:id/sell", authenticateToken, async (req, res) => {
       remaining_amount: Math.max(0, newAmount),
     });
   } catch (err) {
-    console.error("Sell position error:", err.message);
-    res.status(500).json({ error: "Failed to sell position." });
+    await client.query('ROLLBACK');
+    console.error('Sell bet error:', err.message);
+    res.status(500).json({ error: "Error al vender la apuesta." });
+  } finally {
+    client.release();
   }
 });
 
@@ -734,14 +785,15 @@ app.post("/credits/daily", authenticateToken, async (req, res) => {
 app.post("/admin/gift-credits", authenticateToken, requireAdmin, async (req, res) => {
   const { username, amount } = req.body;
 
-  if (!username || !amount || amount < 1) {
-    return res.status(400).json({ error: "Username and positive amount are required." });
+  const safeAmount = Math.floor(parseInt(amount, 10));
+  if (!username || !safeAmount || safeAmount < 1) {
+    return res.status(400).json({ error: "Monto inválido." });
   }
 
   try {
     const result = await pool.query(
       "UPDATE users SET credits = credits + $1 WHERE username = $2 RETURNING id, username, credits",
-      [amount, username]
+      [safeAmount, username]
     );
 
     if (result.rows.length === 0) {
@@ -749,7 +801,7 @@ app.post("/admin/gift-credits", authenticateToken, requireAdmin, async (req, res
     }
 
     res.json({
-      message: `${amount} créditos enviados a ${username}.`,
+      message: `${safeAmount} créditos enviados a ${username}.`,
       user: result.rows[0]
     });
   } catch (err) {

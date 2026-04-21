@@ -39,3 +39,10 @@ CREATE TABLE bets (
   pnl INTEGER NOT NULL DEFAULT 0,           -- realised profit/loss in credits (set on close)
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Performance indexes
+CREATE INDEX IF NOT EXISTS idx_bets_user_id        ON bets(user_id);
+CREATE INDEX IF NOT EXISTS idx_bets_event_id       ON bets(event_id);
+CREATE INDEX IF NOT EXISTS idx_bets_created_at     ON bets(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_price_history_event ON price_history(event_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_user   ON transactions(user_id);

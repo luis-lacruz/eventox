@@ -1557,7 +1557,7 @@
                 <div class="credits-display">
                     CRÉDITOS: ${COIN_SVG} <span class="credits-amount" id="userCredits">${currentUser.credits.toLocaleString()}</span>
                 </div>
-                <div class="user-display">${currentUser.username}</div>
+                <div class="user-display">${escHtml(currentUser.username)}</div>
                 <button class="btn btn-small" onclick="claimDailyBonus()">BONO DIARIO</button>
                 <button class="btn btn-small btn-ghost" onclick="logout()">SALIR</button>
             `;
@@ -1775,7 +1775,7 @@
 
         const items = repeated.map(e => `
             <span class="ticker-item">
-                <span class="label">${e.title.substring(0, 50)}${e.title.length > 50 ? '...' : ''}</span>
+                <span class="label">${escHtml(e.title.substring(0, 50))}${e.title.length > 50 ? '...' : ''}</span>
                 <span class="yes-val">SÍ ${e.yes_price || 50}¢</span>
                 <span class="no-val">NO ${e.no_price || 50}¢</span>
             </span>
@@ -1816,7 +1816,7 @@
             return `
                 <div class="hot-card" onclick="openMarketDetail(${event.id})">
                     <div class="hot-badge">${rankEmoji[i]} HOT</div>
-                    <div class="market-title">${event.title}</div>
+                    <div class="market-title">${escHtml(event.title)}</div>
                     <div class="market-countdown${!isOpen ? ' closed' : ''}" data-closes-at="${event.close_time || ''}">
                         <span class="countdown-label">Cierra en: </span><span class="countdown-value">${!isOpen ? 'CERRADO' : '...'}</span>
                     </div>
@@ -1858,11 +1858,13 @@
             const cat = event.category || 'politics';
             const imageHtml = event.image_url
                 ? `<div class="market-card-img">
-                       <img src="${event.image_url}" alt="" loading="lazy" onerror="this.parentElement.className='market-card-fallback ${cat}'"/>
-                       <div class="market-tag">${event.resolution_source || 'Contrato Binario'}</div>
+                       <img src="${escHtml(event.image_url || '')}" alt="" loading="lazy"
+                            data-fallback-cat="${escHtml(cat)}"
+                            onerror="this.parentElement.className='market-card-fallback ' + this.dataset.fallbackCat">
+                       <div class="market-tag">${escHtml(event.resolution_source || 'Contrato Binario')}</div>
                    </div>`
-                : `<div class="market-card-fallback ${cat}">
-                       <div class="market-tag">${event.resolution_source || 'Contrato Binario'}</div>
+                : `<div class="market-card-fallback ${escHtml(cat)}">
+                       <div class="market-tag">${escHtml(event.resolution_source || 'Contrato Binario')}</div>
                    </div>`;
             const statusLabel = event.status === 'resolved' ? '✓ Resuelto'
                 : event.status === 'overdue'  ? '⚠ Resolución vencida'
@@ -1879,7 +1881,7 @@
             return `
                 <div class="market-card" onclick="openMarketDetail(${event.id})">
                     ${imageHtml}
-                    <div class="market-title">${event.title}</div>
+                    <div class="market-title">${escHtml(event.title)}</div>
                     <div class="market-countdown${event.status !== 'open' ? ' closed' : ''}" data-closes-at="${event.close_time || ''}">
                         <span class="countdown-label">Cierra en: </span><span class="countdown-value">${event.status !== 'open' ? 'CERRADO' : '...'}</span>
                     </div>
@@ -1992,8 +1994,8 @@
         return SHOWCASE_MARKETS.map(m => `
             <div class="upcoming-card">
                 <div class="upcoming-badge badge-coming">PRÓXIMO</div>
-                <div class="market-title">${m.title}</div>
-                <div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-bottom:0.25rem;">${m.resolution_source}</div>
+                <div class="market-title">${escHtml(m.title)}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-bottom:0.25rem;">${escHtml(m.resolution_source)}</div>
                 <div class="upcoming-countdown" data-opens-at="${m.opens_at}">
                     <span class="countdown-label">Abre en: </span><span class="countdown-value">...</span>
                 </div>
@@ -2017,8 +2019,8 @@
                     return `
                         <div class="upcoming-card">
                             <div class="upcoming-badge">🔜 PRÓXIMO</div>
-                            <div class="market-title">${m.title}</div>
-                            ${m.resolution_source ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-bottom:0.25rem;">${m.resolution_source}</div>` : ''}
+                            <div class="market-title">${escHtml(m.title)}</div>
+                            ${m.resolution_source ? `<div style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);margin-bottom:0.25rem;">${escHtml(m.resolution_source)}</div>` : ''}
                             <div class="upcoming-countdown" data-opens-at="${m.opens_at || ''}">
                                 <span class="countdown-label">Abre en: </span><span class="countdown-value">${m.opens_at ? '...' : '—'}</span>
                             </div>
@@ -2324,7 +2326,7 @@
             return `
                 <div class="pos-row">
                     <span class="pos-badge ${p.position}">${p.position === 'yes' ? 'SÍ' : 'NO'}</span>
-                    <span class="pos-title">${p.event_title}</span>
+                    <span class="pos-title">${escHtml(p.event_title)}</span>
                     <span class="${pnlClass}" style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;white-space:nowrap;flex-shrink:0;">${fmt(pnl)}</span>
                     ${actionHtml}
                 </div>`;
@@ -2359,7 +2361,7 @@
                 return `
                     <div class="pos-row">
                         <span class="pos-badge ${p.position}">${p.position === 'yes' ? 'SÍ' : 'NO'}</span>
-                        <span class="pos-title">${p.event_title}</span>
+                        <span class="pos-title">${escHtml(p.event_title)}</span>
                         <span style="font-family:'IBM Plex Mono',monospace;font-size:0.62rem;color:var(--muted);flex-shrink:0;">${date}</span>
                         <span class="${pnlClass}" style="font-family:'IBM Plex Mono',monospace;font-size:0.68rem;white-space:nowrap;flex-shrink:0;">${fmt(pnl)}</span>
                     </div>`;
@@ -2525,7 +2527,7 @@
                 return `
                     <div class="leaderboard-item">
                         <span class="${rankClass}">#${rank}</span>
-                        <span class="${nameClass}">${l.username}${isYou ? ' (tú)' : ''}</span>
+                        <span class="${nameClass}">${escHtml(l.username)}${isYou ? ' (tú)' : ''}</span>
                         <span class="lb-credits">${COIN_SVG} ${l.credits.toLocaleString()}</span>
                     </div>`;
             }).join('');
@@ -2558,7 +2560,7 @@
                 return `
                     <div class="tt-row">
                         <span class="tt-medal ${mc}">#${rank}</span>
-                        <span class="tt-name ${mc}${isYou ? ' is-you' : ''}">${l.username}${isYou ? ' (tú)' : ''}</span>
+                        <span class="tt-name ${mc}${isYou ? ' is-you' : ''}">${escHtml(l.username)}${isYou ? ' (tú)' : ''}</span>
                         <span class="tt-creds">${COIN_SVG} ${l.credits.toLocaleString()}</span>
                     </div>`;
             }).join('');
@@ -2592,6 +2594,15 @@
     });
 
     // ─── Toast ───────────────────────────────────────────────
+
+    function escHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
 
     function showToast(msg, isError = false, { html = false, duration = 3000 } = {}) {
         const toast = document.getElementById('toast');
@@ -2669,11 +2680,11 @@
 
                 return `
                     <div style="background:var(--bg);border:1px solid ${borderColor};border-left:3px solid ${borderColor};padding:1.25rem;margin-bottom:0.75rem;">
-                        <div style="font-family:'Syne',sans-serif;font-weight:600;margin-bottom:0.4rem;">${e.title}</div>
+                        <div style="font-family:'Syne',sans-serif;font-weight:600;margin-bottom:0.4rem;">${escHtml(e.title)}</div>
                         <div style="font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);margin-bottom:0.75rem;display:flex;gap:1.5rem;flex-wrap:wrap;">
                             <span>Cierre: ${closeDate}</span>
                             ${urgencyHtml}
-                            ${e.resolution_source ? `<span>Fuente: ${e.resolution_source}</span>` : ''}
+                            ${e.resolution_source ? `<span>Fuente: ${escHtml(e.resolution_source)}</span>` : ''}
                         </div>
                         <div style="display:flex;gap:0.5rem;">
                             <button class="btn-yes" onclick="resolveMarket(${e.id},'yes')">RESOLVER SÍ</button>
@@ -2836,7 +2847,7 @@
             : event.status === 'resolved' ? 'var(--yes)' : 'var(--muted)';
         document.getElementById('detailMeta').innerHTML = `
             <span>Cierre: ${closeDate}</span>
-            ${event.resolution_source ? `<span>Fuente: ${event.resolution_source}</span>` : ''}
+            ${event.resolution_source ? `<span>Fuente: ${escHtml(event.resolution_source)}</span>` : ''}
             <span style="color:${metaStatusColor};">${metaStatus}</span>`;
 
         const actionsEl = document.getElementById('detailActions');
