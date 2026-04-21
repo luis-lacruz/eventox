@@ -16,6 +16,16 @@ const cors = require("cors");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");     // Password hashing — never store plain text passwords
 const jwt = require("jsonwebtoken");  // Token-based auth — lets users stay logged in
+const multer = require("multer");
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 
 // ─── App Setup ───────────────────────────────────────────────
 
@@ -93,6 +103,64 @@ async function requireAdmin(req, res, next) {
     return res.status(500).json({ error: "Error verifying admin status." });
   }
 }
+
+// ─── Image Upload ─────────────────────────────────────────────
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, 'public/uploads'));
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `market-${Date.now()}${ext}`);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    cb(null, allowed.includes(file.mimetype));
+  }
+});
+
+app.post('/admin/upload-image', authenticateToken, requireAdmin,
+  upload.single('image'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No image uploaded.' });
+    res.json({ url: `/uploads/${req.file.filename}` });
+  }
+);
+
+app.patch('/events/:id/image', authenticateToken, requireAdmin,
+  upload.single('image'), async (req, res) => {
+    const eventId = req.params.id;
+    try {
+      let imageUrl = req.body.image_url || null;
+
+      if (req.file) {
+        imageUrl = `/uploads/${req.file.filename}`;
+      }
+
+      if (!imageUrl) {
+        return res.status(400).json({ error: 'No image provided.' });
+      }
+
+      const result = await pool.query(
+        `UPDATE events SET image_url = $1 WHERE id = $2 RETURNING id, title, image_url`,
+        [imageUrl, eventId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Market not found.' });
+      }
+
+      res.json({ message: 'Image updated.', event: result.rows[0] });
+    } catch (err) {
+      console.error('Image update error:', err.message);
+      res.status(500).json({ error: 'Error updating image.' });
+    }
+  }
+);
 
 // ─── Health Checks ───────────────────────────────────────────
 
@@ -292,6 +360,21 @@ app.get("/events/upcoming", async (req, res) => {
   } catch (err) {
     console.error("Error fetching upcoming events:", err.message);
     res.status(500).json({ error: "Failed to fetch upcoming events" });
+  }
+});
+
+app.post('/events/:id/notify', authenticateToken, async (req, res) => {
+  const eventId = req.params.id;
+  try {
+    await pool.query(
+      `INSERT INTO market_notifications (user_id, event_id)
+       VALUES ($1, $2) ON CONFLICT (user_id, event_id) DO NOTHING`,
+      [req.user.id, eventId]
+    );
+    res.json({ message: 'Te notificaremos cuando este mercado abra.' });
+  } catch (err) {
+    console.error('Notify error:', err.message);
+    res.status(500).json({ error: 'Error al registrar notificación.' });
   }
 });
 
@@ -547,6 +630,10 @@ app.post("/bets", authenticateToken, async (req, res) => {
     if (event.status !== "open") {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: "Market is closed." });
+    }
+    if (event.close_time && new Date(event.close_time) <= new Date()) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: "Este mercado ya cerró." });
     }
 
     const entryPrice = position.toLowerCase() === "yes"
@@ -892,14 +979,70 @@ app.get('/transactions/mine', authenticateToken, async (req, res) => {
   }
 });
 
+// ─── Email Notifications ─────────────────────────────────────
+
+async function sendMarketOpenEmails(eventId, eventTitle) {
+  try {
+    const result = await pool.query(
+      `SELECT u.email, u.username
+       FROM market_notifications mn
+       JOIN users u ON u.id = mn.user_id
+       WHERE mn.event_id = $1 AND mn.notified = false`,
+      [eventId]
+    );
+    for (const user of result.rows) {
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: user.email,
+        subject: `EventoX — Ya abrió: ${eventTitle}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:500px">
+            <h2 style="color:#c8f135">EventoX</h2>
+            <p>Hola ${user.username},</p>
+            <p>El mercado que estabas esperando ya está abierto:</p>
+            <p><strong>${eventTitle}</strong></p>
+            <a href="https://eventox-production.up.railway.app"
+               style="background:#c8f135;color:#000;padding:10px 20px;
+                      text-decoration:none;border-radius:4px;display:inline-block;
+                      margin-top:12px">
+              Ver mercado →
+            </a>
+          </div>
+        `
+      });
+    }
+    await pool.query(
+      `UPDATE market_notifications SET notified = true WHERE event_id = $1`,
+      [eventId]
+    );
+  } catch (err) {
+    console.error('Email send error:', err.message);
+  }
+}
+
 // ─── Resolution Scheduler ────────────────────────────────────
 //
 // Runs every 5 minutes (and once at startup):
-//   1. Auto-close events whose close_time has passed
-//   2. Escalate to 'overdue' if admin hasn't resolved within 24h
+//   1. Open upcoming events whose opens_at has passed (and email subscribers)
+//   2. Auto-close events whose close_time has passed
+//   3. Escalate to 'overdue' if admin hasn't resolved within 24h
 
 async function runResolutionScheduler() {
   try {
+    const opened = await pool.query(`
+      UPDATE events
+      SET status = 'open'
+      WHERE status = 'upcoming'
+        AND opens_at IS NOT NULL
+        AND opens_at <= NOW()
+      RETURNING id, title`);
+    if (opened.rows.length > 0) {
+      console.log(`[Scheduler] Opened: ${opened.rows.map(r => r.title).join(', ')}`);
+      for (const row of opened.rows) {
+        sendMarketOpenEmails(row.id, row.title);
+      }
+    }
+
     const closed = await pool.query(`
       UPDATE events
       SET status = 'closed', closed_at = NOW()

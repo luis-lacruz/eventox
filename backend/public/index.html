@@ -861,6 +861,38 @@
             transition: border-color 0.15s;
         }
         .form-input:focus { border-color: var(--accent); }
+        .image-input-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: stretch;
+        }
+        .image-input-group .form-input { flex: 1; }
+        .btn-upload {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.65rem 0.85rem;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: border-color 0.15s, color 0.15s;
+        }
+        .btn-upload:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-edit-img {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            padding: 0.4rem 0.75rem;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            cursor: pointer;
+            transition: border-color 0.15s, color 0.15s;
+        }
+        .btn-edit-img:hover { border-color: var(--accent); color: var(--accent); }
         .form-error {
             font-family: 'IBM Plex Mono', monospace;
             font-size: 0.75rem;
@@ -1393,8 +1425,17 @@
             <input class="form-input" id="eventSource" placeholder="Registraduría, DANE, Fiscalía..." />
         </div>
         <div class="form-group">
-            <label class="form-label">URL de Imagen</label>
-            <input class="form-input" id="eventImage" placeholder="https://upload.wikimedia.org/..." />
+            <label class="form-label">Imagen</label>
+            <div class="image-input-group">
+                <input class="form-input" id="eventImage"
+                       placeholder="URL de imagen (o sube un archivo)" />
+                <label class="btn-upload">
+                    📁 Subir imagen
+                    <input type="file" id="marketImageFile"
+                           accept="image/jpeg,image/png,image/webp"
+                           style="display:none">
+                </label>
+            </div>
         </div>
         <div class="modal-actions">
             <button class="btn" onclick="closeModal('newMarketModal')">Cancelar</button>
@@ -1428,6 +1469,37 @@
         <div class="modal-actions">
             <button class="btn" onclick="closeModal('betModal')">Cancelar</button>
             <button class="btn btn-primary" onclick="placeBet()">Confirmar Posición</button>
+        </div>
+    </div>
+</div>
+
+<!-- EDIT IMAGE MODAL -->
+<div class="modal-overlay" id="editImageModal" style="display:none" onclick="if(event.target===this)closeEditImageModal()">
+    <div class="modal" style="max-width:420px">
+        <div class="modal-title">
+            Editar imagen del mercado
+            <button class="modal-close" onclick="closeEditImageModal()">✕</button>
+        </div>
+        <p id="editImageMarketTitle" style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem;line-height:1.4;"></p>
+        <div class="form-group">
+            <label class="form-label">URL de imagen</label>
+            <input class="form-input" type="text" id="editImageUrl" placeholder="https://..." />
+        </div>
+        <div class="form-group">
+            <label class="form-label">O sube un archivo</label>
+            <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.35rem;">
+                <label class="btn-upload">
+                    📁 Subir imagen
+                    <input type="file" id="editImageFile"
+                           accept="image/jpeg,image/png,image/webp"
+                           style="display:none">
+                </label>
+                <span id="editImageFileName" style="font-family:'IBM Plex Mono',monospace;font-size:0.7rem;color:var(--muted);"></span>
+            </div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn" onclick="closeEditImageModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="submitEditImage()">Guardar</button>
         </div>
     </div>
 </div>
@@ -2043,30 +2115,26 @@
     }
 
     function notifyShowcase() {
-        if (!currentUser) {
-            openAuthModal('login');
-            return;
-        }
-        showToast('Las notificaciones para este mercado estarán disponibles próximamente.');
+        if (!currentUser) { openAuthModal('login'); return; }
+        showToast('Te avisaremos cuando abra este mercado.');
     }
 
     async function watchMarket(id) {
+        if (!currentUser) { openAuthModal('login'); return; }
         if (watchedMarkets.has(id)) return;
         try {
-            const headers = currentUser ? authHeaders() : { 'Content-Type': 'application/json' };
-            const res = await fetch(`${API}/events/${id}/watch`, { method: 'POST', headers });
-            if (!res.ok) throw new Error('Watch failed');
+            const res = await fetch(`${API}/events/${id}/notify`, {
+                method: 'POST',
+                headers: authHeaders()
+            });
             const data = await res.json();
+            if (!res.ok) { showToast(data.error || 'Error al registrar notificación.', true); return; }
             watchedMarkets.add(id);
             const btn = document.getElementById(`watchBtn-${id}`);
             if (btn) { btn.disabled = true; btn.textContent = '✓ Anotado'; }
-            const countEl = document.getElementById(`watchCount-${id}`);
-            if (countEl) {
-                const c = data.watch_count || 0;
-                countEl.textContent = `${c} usuario${c !== 1 ? 's' : ''} esperando`;
-            }
+            showToast('Te avisaremos cuando abra este mercado.');
         } catch (err) {
-            showToast('No se pudo registrar la notificación', true);
+            showToast('No se pudo registrar la notificación.', true);
         }
     }
 
@@ -2113,7 +2181,26 @@
         }
 
         try {
-            const body = { title, description, status, resolution_source, image_url };
+            const fileInput = document.getElementById('marketImageFile');
+            if (fileInput.files.length > 0) {
+                const formData = new FormData();
+                formData.append('image', fileInput.files[0]);
+                const uploadRes = await fetch(`${API}/admin/upload-image`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` },
+                    body: formData
+                });
+                if (uploadRes.ok) {
+                    const { url } = await uploadRes.json();
+                    document.getElementById('eventImage').value = url;
+                } else {
+                    showToast('Error al subir imagen', true);
+                    return;
+                }
+            }
+
+            const body = { title, description, status, resolution_source,
+                           image_url: document.getElementById('eventImage').value.trim() };
             if (status === 'upcoming') {
                 body.opens_at = opens_at;
             } else {
@@ -2135,7 +2222,7 @@
             } else {
                 loadEvents();
             }
-            ['eventTitle','eventDesc','eventCloseTime','eventOpensAt','eventSource','eventImage'].forEach(id => {
+            ['eventTitle','eventDesc','eventCloseTime','eventOpensAt','eventSource','eventImage','marketImageFile'].forEach(id => {
                 document.getElementById(id).value = '';
             });
             document.getElementById('eventStatus').value = 'open';
@@ -2686,9 +2773,10 @@
                             ${urgencyHtml}
                             ${e.resolution_source ? `<span>Fuente: ${escHtml(e.resolution_source)}</span>` : ''}
                         </div>
-                        <div style="display:flex;gap:0.5rem;">
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
                             <button class="btn-yes" onclick="resolveMarket(${e.id},'yes')">RESOLVER SÍ</button>
                             <button class="btn-no"  onclick="resolveMarket(${e.id},'no')">RESOLVER NO</button>
+                            <button class="btn-edit-img" onclick="openEditImageModal(${e.id}, '${escHtml(e.title).replace(/'/g, "\\'")}')">🖼 Imagen</button>
                         </div>
                     </div>`;
             }).join('');
@@ -2701,6 +2789,70 @@
                 </div>`;
         }
     }
+
+    let editImageEventId = null;
+
+    function openEditImageModal(eventId, title) {
+        editImageEventId = eventId;
+        document.getElementById('editImageMarketTitle').textContent = title;
+        document.getElementById('editImageUrl').value = '';
+        document.getElementById('editImageFile').value = '';
+        document.getElementById('editImageFileName').textContent = '';
+        document.getElementById('editImageModal').style.display = 'flex';
+    }
+
+    function closeEditImageModal() {
+        document.getElementById('editImageModal').style.display = 'none';
+        editImageEventId = null;
+    }
+
+    async function submitEditImage() {
+        if (!editImageEventId) return;
+        const fileInput = document.getElementById('editImageFile');
+        const urlInput = document.getElementById('editImageUrl').value.trim();
+        const token = localStorage.getItem('eventox_token');
+
+        try {
+            let res;
+            if (fileInput.files.length > 0) {
+                const formData = new FormData();
+                formData.append('image', fileInput.files[0]);
+                res = await fetch(`${API}/events/${editImageEventId}/image`, {
+                    method: 'PATCH',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+            } else if (urlInput) {
+                res = await fetch(`${API}/events/${editImageEventId}/image`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ image_url: urlInput })
+                });
+            } else {
+                showToast('Ingresa una URL o selecciona un archivo', true);
+                return;
+            }
+
+            if (res.ok) {
+                showToast('Imagen actualizada correctamente');
+                closeEditImageModal();
+                loadAdminMarkets();
+                loadEvents();
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'Error al actualizar imagen', true);
+            }
+        } catch (err) {
+            showToast('Error de conexión', true);
+        }
+    }
+
+    document.getElementById('editImageFile').addEventListener('change', function() {
+        document.getElementById('editImageFileName').textContent = this.files[0]?.name || '';
+    });
 
     async function resolveMarket(eventId, result) {
         if (!confirm(`¿Resolver este mercado como ${result.toUpperCase()}? Esta acción no se puede deshacer.`)) return;

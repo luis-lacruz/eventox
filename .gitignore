@@ -20,3 +20,6 @@ npm-debug.log*
 # Build output
 dist/
 build/
+
+backend/public/uploads/*
+!backend/public/uploads/.gitkeep
