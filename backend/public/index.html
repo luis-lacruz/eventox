@@ -1936,7 +1936,8 @@
                 day: 'numeric', month: 'short', year: 'numeric'
             });
             const cat = event.category || 'politics';
-            const imageHtml = event.image_url
+            const validImage = event.image_url && !event.image_url.startsWith('/uploads/');
+            const imageHtml = validImage
                 ? `<div class="market-card-img">
                        <img src="${escHtml(event.image_url)}" alt="" loading="lazy"
                             data-fallback-cat="${escHtml(cat)}"
