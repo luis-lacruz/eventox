@@ -2196,11 +2196,14 @@
                     headers: { 'Authorization': `Bearer ${authToken}` },
                     body: formData
                 });
+                const uploadText = await uploadRes.text();
                 if (uploadRes.ok) {
-                    const { url } = await uploadRes.json();
+                    const { url } = JSON.parse(uploadText);
                     document.getElementById('eventImage').value = url;
                 } else {
-                    showToast('Error al subir imagen', true);
+                    let uploadErr = `Error ${uploadRes.status}`;
+                    try { uploadErr = JSON.parse(uploadText).error || uploadErr; } catch {}
+                    showToast(uploadErr, true);
                     return;
                 }
             }
