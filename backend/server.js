@@ -9,12 +9,7 @@
  */
 
 const path = require("path");
-const fs = require("fs");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
-
-// Ensure uploads directory exists (Railway filesystem may not persist it)
-const uploadsDir = path.join(__dirname, "public/uploads");
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const express = require("express");
 const cors = require("cors");
@@ -22,7 +17,23 @@ const { Pool } = require("pg");
 const bcrypt = require("bcrypt");     // Password hashing — never store plain text passwords
 const jwt = require("jsonwebtoken");  // Token-based auth — lets users stay logged in
 const multer = require("multer");
+const cloudinary = require("cloudinary").v2;
 const nodemailer = require('nodemailer');
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+function uploadToCloudinary(buffer) {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_stream(
+      { folder: 'eventox', transformation: [{ width: 1200, crop: 'limit' }] },
+      (err, result) => err ? reject(err) : resolve(result)
+    ).end(buffer);
+  });
+}
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -111,17 +122,8 @@ async function requireAdmin(req, res, next) {
 
 // ─── Image Upload ─────────────────────────────────────────────
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, 'public/uploads'));
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `market-${Date.now()}${ext}`);
-  }
-});
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = ['image/jpeg', 'image/png', 'image/webp'];
@@ -130,9 +132,15 @@ const upload = multer({
 });
 
 app.post('/admin/upload-image', authenticateToken, requireAdmin,
-  upload.single('image'), (req, res) => {
+  upload.single('image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No image uploaded.' });
-    res.json({ url: `/uploads/${req.file.filename}` });
+    try {
+      const result = await uploadToCloudinary(req.file.buffer);
+      res.json({ url: result.secure_url });
+    } catch (err) {
+      console.error('Cloudinary upload error:', err.message);
+      res.status(500).json({ error: `Error subiendo imagen: ${err.message}` });
+    }
   }
 );
 
@@ -143,7 +151,8 @@ app.patch('/events/:id/image', authenticateToken, requireAdmin,
       let imageUrl = req.body.image_url || null;
 
       if (req.file) {
-        imageUrl = `/uploads/${req.file.filename}`;
+        const result = await uploadToCloudinary(req.file.buffer);
+        imageUrl = result.secure_url;
       }
 
       if (!imageUrl) {
