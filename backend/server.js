@@ -1104,6 +1104,53 @@ app.get("/stats", async (req, res) => {
 
 
 
+// ─── Intent Signals ──────────────────────────────────────────
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS intent_signals (
+    id         SERIAL PRIMARY KEY,
+    event_id   INTEGER REFERENCES events(id) ON DELETE SET NULL,
+    action     TEXT NOT NULL,
+    ip         TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+  )
+`).catch(err => console.error('intent_signals setup error:', err.message));
+
+app.post('/analytics/intent', async (req, res) => {
+  const { event_id, action } = req.body;
+  if (!action) return res.status(400).json({ error: 'action required' });
+  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+    || req.socket.remoteAddress;
+  try {
+    await pool.query(
+      `INSERT INTO intent_signals (event_id, action, ip) VALUES ($1, $2, $3)`,
+      [event_id || null, action, ip]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to log intent' });
+  }
+});
+
+app.get('/admin/intent-signals', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        COALESCE(e.title, '(mercado eliminado)') AS market,
+        i.action,
+        COUNT(*)::int                            AS count,
+        MAX(i.created_at)                        AS last_seen
+      FROM intent_signals i
+      LEFT JOIN events e ON e.id = i.event_id
+      GROUP BY e.title, i.action
+      ORDER BY count DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch intent signals' });
+  }
+});
+
 // ─── Serve Frontend ──────────────────────────────────────────
 
 app.get("/", (req, res) => {
