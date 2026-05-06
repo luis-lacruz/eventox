@@ -5,7 +5,8 @@
  * focused on Colombian real-world events. Users place YES/NO positions
  * on markets that resolve based on official government data.
  *
- * Stack: Node.js + Express + PostgreSQL + JWT Auth
+ * Stack: Node.js + Express + PostgreSQL
+ * Mode: Open demo — no login required, shared demo user
  */
 
 const path = require("path");
@@ -13,9 +14,9 @@ require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const { Pool } = require("pg");
-const bcrypt = require("bcrypt");     // Password hashing — never store plain text passwords
-const jwt = require("jsonwebtoken");  // Token-based auth — lets users stay logged in
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const nodemailer = require('nodemailer');
@@ -47,15 +48,66 @@ const transporter = nodemailer.createTransport({
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) { console.error("FATAL: JWT_SECRET is not set in .env — server refused to start."); process.exit(1); }
 
-// SALT_ROUNDS controls how many times bcrypt re-hashes the password.
-// Higher = more secure but slower. 10 is the standard for most apps.
-const SALT_ROUNDS = 10;
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  process.env.APP_URL,            // e.g. https://eventox-production.up.railway.app
+].filter(Boolean);
 
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (e.g. curl, mobile apps) and listed origins
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    cb(new Error('Not allowed by CORS'));
+  }
+}));
+
+// Security headers — disables powered-by, sets XSS/frame/MIME protections.
+// CSP is relaxed to allow the CDN scripts (Chart.js, Google Fonts) the app needs.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+      styleSrc:  ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc:   ["'self'", "https://fonts.gstatic.com"],
+      imgSrc:    ["'self'", "data:", "https://res.cloudinary.com", "https:"],
+      connectSrc:["'self'"],
+    }
+  }
+}));
+
+// ─── Rate Limiters ───────────────────────────────────────────
+
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.' }
+});
+
+const betLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { error: 'Demasiadas apuestas por minuto.' }
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Demasiadas subidas de imagen. Intenta en 15 minutos.' }
+});
+
+const analyticsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: 'Límite de analytics alcanzado.' }
+});
+
+app.use(generalLimiter);
+app.use(express.json({ limit: '50kb' }));
 app.use(express.static(path.join(__dirname, "public")));
 
 // ─── Database ────────────────────────────────────────────────
@@ -71,52 +123,43 @@ app.use((req, res, next) => {
   next();
 });
 
-// ─── Auth Middleware ─────────────────────────────────────────
+// ─── Demo User ──────────────────────────────────────────────
 //
-// This function sits between the request and your route handler.
-// It checks for a valid JWT token in the Authorization header.
-// If valid → attaches the user info to req.user and calls next().
-// If missing/invalid → sends a 401 error and stops the request.
-//
-// Usage: add "authenticateToken" to any route that requires login:
-//   app.post("/bets", authenticateToken, async (req, res) => { ... })
+// Open demo mode: a single shared user is auto-created on first request.
+// All operations run as this user — no login required.
 
-function authenticateToken(req, res, next) {
-  // The client sends: Authorization: Bearer <token>
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1]; // grab just the token part
+const DEMO_USERNAME = 'demo';
+const DEMO_EMAIL = 'demo@eventox.co';
+let _demoUser = null;
 
-  if (!token) {
-    return res.status(401).json({ error: "Access denied. No token provided." });
+async function ensureDemoUser() {
+  if (_demoUser) return _demoUser;
+  const existing = await pool.query(
+    "SELECT id, username, email, credits, is_admin, created_at FROM users WHERE username = $1",
+    [DEMO_USERNAME]
+  );
+  if (existing.rows.length > 0) {
+    _demoUser = existing.rows[0];
+  } else {
+    const created = await pool.query(
+      `INSERT INTO users (username, email, password_hash, is_admin)
+       VALUES ($1, $2, 'demo_no_login', true)
+       RETURNING id, username, email, credits, is_admin, created_at`,
+      [DEMO_USERNAME, DEMO_EMAIL]
+    );
+    _demoUser = created.rows[0];
   }
-
-  try {
-    // jwt.verify checks if the token is valid and not expired.
-    // If valid, it returns the payload we stored when creating the token.
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded; // now every route after this can use req.user.id, req.user.username, etc.
-    next();
-  } catch (err) {
-    return res.status(403).json({ error: "Invalid or expired token." });
-  }
+  return _demoUser;
 }
 
-// Admin-only middleware — use AFTER authenticateToken
-// Checks if the logged-in user has is_admin = true — verified against the DB,
-// not the JWT, so revoked admin tokens are rejected immediately.
-async function requireAdmin(req, res, next) {
+async function useDemoUser(req, res, next) {
   try {
-    const result = await pool.query(
-      "SELECT is_admin FROM users WHERE id = $1",
-      [req.user.id]
-    );
-    if (!result.rows[0]?.is_admin) {
-      return res.status(403).json({ error: "Admin access required." });
-    }
+    const user = await ensureDemoUser();
+    req.user = { id: user.id, username: user.username, is_admin: true };
     next();
   } catch (err) {
-    console.error("requireAdmin error:", err.message);
-    return res.status(500).json({ error: "Error verifying admin status." });
+    console.error("useDemoUser error:", err.message);
+    return res.status(500).json({ error: "Error loading demo user." });
   }
 }
 
@@ -131,7 +174,7 @@ const upload = multer({
   }
 });
 
-app.post('/admin/upload-image', authenticateToken, requireAdmin,
+app.post('/admin/upload-image', uploadLimiter, useDemoUser,
   upload.single('image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No image uploaded.' });
     try {
@@ -139,12 +182,12 @@ app.post('/admin/upload-image', authenticateToken, requireAdmin,
       res.json({ url: result.secure_url });
     } catch (err) {
       console.error('Cloudinary upload error:', err.message);
-      res.status(500).json({ error: `Error subiendo imagen: ${err.message}` });
+      res.status(500).json({ error: 'Error al subir la imagen.' });
     }
   }
 );
 
-app.patch('/events/:id/image', authenticateToken, requireAdmin,
+app.patch('/events/:id/image', uploadLimiter, useDemoUser,
   upload.single('image'), async (req, res) => {
     const eventId = req.params.id;
     try {
@@ -192,155 +235,19 @@ app.get("/health/db", async (req, res) => {
   }
 });
 
-// ─── Authentication ──────────────────────────────────────────
+// ─── Demo Auth ──────────────────────────────────────────────
 
-/**
- * POST /auth/register
- * Create a new user account.
- * Body: { username, email, password }
- *
- * Flow:
- * 1. Check if username or email already exists
- * 2. Hash the password (never store plain text!)
- * 3. Insert user into database
- * 4. Return a JWT token so they're logged in immediately
- */
-app.post("/auth/register", async (req, res) => {
-  const { username, email, password } = req.body;
-
-  // Validate all fields are present
-  if (!username || !email || !password) {
-    return res.status(400).json({ error: "Username, email, and password are required." });
-  }
-
-  // Validate password length
-  if (password.length < 6) {
-    return res.status(400).json({ error: "Password must be at least 6 characters." });
-  }
-
+app.get("/auth/demo", async (req, res) => {
   try {
-    // Check if user already exists
-    const existing = await pool.query(
-      "SELECT id FROM users WHERE username = $1 OR email = $2",
-      [username, email]
-    );
-
-    if (existing.rows.length > 0) {
-      return res.status(409).json({ error: "Username or email already taken." });
-    }
-
-    // Hash the password — bcrypt adds a random "salt" automatically,
-    // so even identical passwords produce different hashes.
-    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-
-    // Insert the new user — they start with 1,000 credits
-    const result = await pool.query(
-      `INSERT INTO users (username, email, password_hash)
-       VALUES ($1, $2, $3)
-       RETURNING id, username, email, credits, is_admin, created_at`,
-      [username, email, passwordHash]
-    );
-
-    const user = result.rows[0];
-
-    // Create a JWT token — this is what the frontend stores to stay logged in.
-    // The token contains the user's id, username, and admin status.
-    // expiresIn: "7d" means the token is valid for 7 days.
-    const token = jwt.sign(
-      { id: user.id, username: user.username, is_admin: user.is_admin },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    res.status(201).json({ token, user });
-  } catch (err) {
-    console.error("Registration error:", err.message);
-    res.status(500).json({ error: "Registration failed." });
-  }
-});
-
-/**
- * POST /auth/login
- * Log in with existing credentials.
- * Body: { email, password }
- *
- * Flow:
- * 1. Find user by email
- * 2. Compare password against stored hash
- * 3. If match → return JWT token
- * 4. If no match → return generic error (don't reveal which field was wrong)
- */
-app.post("/auth/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password are required." });
-  }
-
-  try {
-    const result = await pool.query(
-      "SELECT * FROM users WHERE email = $1",
-      [email]
-    );
-
-    if (result.rows.length === 0) {
-      // Generic message — don't tell attackers whether the email exists
-      return res.status(401).json({ error: "Invalid email or password." });
-    }
-
-    const user = result.rows[0];
-
-    // bcrypt.compare hashes the provided password and checks if it
-    // matches the stored hash. Returns true/false.
-    const validPassword = await bcrypt.compare(password, user.password_hash);
-
-    if (!validPassword) {
-      return res.status(401).json({ error: "Invalid email or password." });
-    }
-
-    const token = jwt.sign(
-      { id: user.id, username: user.username, is_admin: user.is_admin },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    // Return user info (without password_hash!)
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        credits: user.credits,
-        is_admin: user.is_admin,
-      },
-    });
-  } catch (err) {
-    console.error("Login error:", err.message);
-    res.status(500).json({ error: "Login failed." });
-  }
-});
-
-/**
- * GET /auth/me
- * Returns the currently logged-in user's info.
- * Requires a valid token — used by the frontend to check if still logged in.
- */
-app.get("/auth/me", authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query(
+    const user = await ensureDemoUser();
+    const fresh = await pool.query(
       "SELECT id, username, email, credits, is_admin, created_at FROM users WHERE id = $1",
-      [req.user.id]
+      [user.id]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "User not found." });
-    }
-
-    res.json(result.rows[0]);
+    res.json(fresh.rows[0]);
   } catch (err) {
-    console.error("Auth check error:", err.message);
-    res.status(500).json({ error: "Failed to fetch user." });
+    console.error("Demo auth error:", err.message);
+    res.status(500).json({ error: "Failed to load demo user." });
   }
 });
 
@@ -377,7 +284,7 @@ app.get("/events/upcoming", async (req, res) => {
   }
 });
 
-app.post('/events/:id/notify', authenticateToken, async (req, res) => {
+app.post('/events/:id/notify', useDemoUser, async (req, res) => {
   const eventId = req.params.id;
   try {
     await pool.query(
@@ -429,15 +336,21 @@ app.get("/events/:id/watching", async (req, res) => {
  * Create a new market. Admin only.
  * Body: { title, description?, category?, resolution_source?, close_time?, status?, opens_at? }
  */
-app.post("/events", authenticateToken, requireAdmin, async (req, res) => {
+app.post("/events", useDemoUser, async (req, res) => {
   const { title, description, category, resolution_source, close_time, image_url, status, opens_at } =
     req.body;
 
   const ALLOWED_CATEGORIES = ['politics', 'economics', 'security', 'sports'];
   const safeCategory = ALLOWED_CATEGORIES.includes(category) ? category : 'politics';
 
-  if (!title) {
-    return res.status(400).json({ error: "Title is required" });
+  if (!title || typeof title !== 'string' || title.trim().length < 5 || title.length > 300) {
+    return res.status(400).json({ error: "Title is required (5–300 characters)." });
+  }
+  if (description && (typeof description !== 'string' || description.length > 1000)) {
+    return res.status(400).json({ error: "Description must be under 1000 characters." });
+  }
+  if (resolution_source && (typeof resolution_source !== 'string' || resolution_source.length > 200)) {
+    return res.status(400).json({ error: "Resolution source must be under 200 characters." });
   }
 
   const eventStatus = status === "upcoming" ? "upcoming" : "open";
@@ -476,7 +389,7 @@ app.post("/events", authenticateToken, requireAdmin, async (req, res) => {
  * 3. Pay out winners (2x their stake — they risked credits and won)
  * 4. Return summary of payouts
  */
-app.post("/events/:id/resolve", authenticateToken, requireAdmin, async (req, res) => {
+app.post("/events/:id/resolve", useDemoUser, async (req, res) => {
   const eventId = req.params.id;
   const { result } = req.body;
 
@@ -612,7 +525,7 @@ async function updatePrices(eventId, side, amount, isBuy, db = pool) {
  * Buy a YES or NO position. Records entry price and moves market price.
  * Body: { event_id, position: "yes"|"no", amount? }
  */
-app.post("/bets", authenticateToken, async (req, res) => {
+app.post("/bets", betLimiter, useDemoUser, async (req, res) => {
   const { event_id, position, amount } = req.body;
   const betAmount = parseInt(amount, 10);
   if (!Number.isInteger(betAmount) || betAmount < 1) {
@@ -717,7 +630,7 @@ app.post("/bets", authenticateToken, async (req, res) => {
  * Return = sell_amount × current_price / entry_price
  * PnL    = return − sell_amount
  */
-app.post("/bets/:id/sell", authenticateToken, async (req, res) => {
+app.post("/bets/:id/sell", useDemoUser, async (req, res) => {
   const betId = req.params.id;
   const { sell_amount } = req.body;
 
@@ -809,7 +722,7 @@ app.post("/bets/:id/sell", authenticateToken, async (req, res) => {
  * Returns all positions for the logged-in user, including live market prices
  * so the frontend can compute current value and unrealised PnL.
  */
-app.get("/bets/mine", authenticateToken, async (req, res) => {
+app.get("/bets/mine", useDemoUser, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT b.*,
@@ -837,35 +750,34 @@ app.get("/bets/mine", authenticateToken, async (req, res) => {
  * POST /credits/daily
  * Claim daily login bonus. Awards 200 credits every 24 hours.
  */
-app.post("/credits/daily", authenticateToken, async (req, res) => {
+app.post("/credits/daily", useDemoUser, async (req, res) => {
   const BONUS_AMOUNT = 200;
-  const COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
   try {
-    const userResult = await pool.query(
-      "SELECT credits, last_daily_bonus FROM users WHERE id = $1",
-      [req.user.id]
-    );
-    const user = userResult.rows[0];
-
-    if (user.last_daily_bonus) {
-      const msSinceClaim = Date.now() - new Date(user.last_daily_bonus).getTime();
-      if (msSinceClaim < COOLDOWN_MS) {
-        const msLeft = COOLDOWN_MS - msSinceClaim;
-        const hoursLeft = Math.floor(msLeft / (1000 * 60 * 60));
-        const minutesLeft = Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60));
-        return res.status(429).json({
-          error: "already_claimed",
-          hours_left: hoursLeft,
-          minutes_left: minutesLeft,
-        });
-      }
-    }
-
+    // Atomic: only updates if 24h have elapsed since last claim — no race condition possible.
     const result = await pool.query(
-      "UPDATE users SET credits = credits + $1, last_daily_bonus = NOW() WHERE id = $2 RETURNING credits",
+      `UPDATE users
+       SET credits = credits + $1, last_daily_bonus = NOW()
+       WHERE id = $2
+         AND (last_daily_bonus IS NULL OR last_daily_bonus <= NOW() - INTERVAL '24 hours')
+       RETURNING credits`,
       [BONUS_AMOUNT, req.user.id]
     );
+
+    if (result.rows.length === 0) {
+      // Cooldown not elapsed — fetch remaining time
+      const timeResult = await pool.query(
+        "SELECT last_daily_bonus FROM users WHERE id = $1",
+        [req.user.id]
+      );
+      const lastClaim = timeResult.rows[0]?.last_daily_bonus;
+      const msLeft = lastClaim
+        ? Math.max(0, new Date(lastClaim).getTime() + 24 * 3600 * 1000 - Date.now())
+        : 0;
+      const hoursLeft = Math.floor(msLeft / (1000 * 60 * 60));
+      const minutesLeft = Math.floor((msLeft % (1000 * 60 * 60)) / (1000 * 60));
+      return res.status(429).json({ error: "already_claimed", hours_left: hoursLeft, minutes_left: minutesLeft });
+    }
 
     res.json({
       message: `¡${BONUS_AMOUNT} créditos reclamados!`,
@@ -883,7 +795,7 @@ app.post("/credits/daily", authenticateToken, async (req, res) => {
  * Admin gifts credits to a user by username.
  * Body: { username, amount }
  */
-app.post("/admin/gift-credits", authenticateToken, requireAdmin, async (req, res) => {
+app.post("/admin/gift-credits", useDemoUser, async (req, res) => {
   const { username, amount } = req.body;
 
   const safeAmount = Math.floor(parseInt(amount, 10));
@@ -974,7 +886,7 @@ app.get('/events/:id/price-history', async (req, res) => {
 
 // ─── Transaction History ─────────────────────────────────────
 
-app.get('/transactions/mine', authenticateToken, async (req, res) => {
+app.get('/transactions/mine', useDemoUser, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT t.id, t.type, t.amount, t.description, t.created_at,
@@ -1116,9 +1028,14 @@ pool.query(`
   )
 `).catch(err => console.error('intent_signals setup error:', err.message));
 
-app.post('/analytics/intent', async (req, res) => {
+app.post('/analytics/intent', analyticsLimiter, async (req, res) => {
   const { event_id, action } = req.body;
-  if (!action) return res.status(400).json({ error: 'action required' });
+  if (!action || typeof action !== 'string' || action.length > 100) {
+    return res.status(400).json({ error: 'action required and must be under 100 characters' });
+  }
+  if (event_id !== undefined && event_id !== null && !Number.isInteger(Number(event_id))) {
+    return res.status(400).json({ error: 'invalid event_id' });
+  }
   const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
     || req.socket.remoteAddress;
   try {
@@ -1132,7 +1049,7 @@ app.post('/analytics/intent', async (req, res) => {
   }
 });
 
-app.get('/admin/intent-signals', authenticateToken, requireAdmin, async (req, res) => {
+app.get('/admin/intent-signals', useDemoUser, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT

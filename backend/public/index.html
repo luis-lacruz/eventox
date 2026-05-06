@@ -1194,12 +1194,13 @@
     </div>
 </header>
 
-<!-- NAV TABS (shown when logged in) -->
-<div class="nav-tabs" id="navTabs" style="display: none;">
+<!-- NAV TABS -->
+<div class="nav-tabs" id="navTabs">
     <button class="nav-tab active" onclick="showPage('markets', this)">Mercados</button>
     <button class="nav-tab" onclick="showPage('upcoming', this)">Próximos</button>
-    <button class="nav-tab" onclick="showPage('positions', this)">Mis Posiciones</button>
-<button class="nav-tab" id="adminTab" style="display:none;" onclick="showPage('admin', this)">Admin</button>
+    <button class="nav-tab" onclick="showPage('positions', this)">Posiciones</button>
+    <button class="nav-tab" onclick="showPage('leaderboard', this)">Ranking</button>
+    <button class="nav-tab" id="adminTab" onclick="showPage('admin', this)">Admin</button>
 </div>
 
 <!-- TICKER -->
@@ -1242,7 +1243,7 @@
         </div>
         <div class="section-header">
             <div class="section-title">Mercados Activos</div>
-            <button class="btn btn-primary btn-small" id="newMarketBtn" style="display:none;" onclick="openNewMarketModal()">+ NUEVO MERCADO</button>
+            <button class="btn btn-primary btn-small" id="newMarketBtn" onclick="openNewMarketModal()">+ NUEVO MERCADO</button>
         </div>
         <div class="filter-row">
             <button class="filter-btn active" onclick="filterMarkets('all', this)">Todos</button>
@@ -1338,57 +1339,7 @@
     </div>
 </main>
 
-<!-- AUTH MODAL -->
-<div class="modal-overlay" id="authModal">
-    <div class="modal">
-        <div class="modal-title">
-            <span id="authModalTitle">Iniciar Sesión</span>
-            <button class="modal-close" onclick="closeModal('authModal')">✕</button>
-        </div>
-        <!-- Login Form -->
-        <div id="loginForm">
-            <div class="form-group">
-                <label class="form-label">Email</label>
-                <input class="form-input" id="loginEmail" type="email" placeholder="tu@email.com" />
-            </div>
-            <div class="form-group">
-                <label class="form-label">Contraseña</label>
-                <input class="form-input" id="loginPassword" type="password" placeholder="••••••" />
-            </div>
-            <div class="form-error" id="loginError"></div>
-            <div class="modal-actions">
-                <button class="btn" onclick="closeModal('authModal')">Cancelar</button>
-                <button class="btn btn-primary" onclick="handleLogin()">Entrar</button>
-            </div>
-            <div class="auth-toggle">
-                ¿No tienes cuenta? <a onclick="toggleAuthMode('register')">Regístrate</a>
-            </div>
-        </div>
-        <!-- Register Form -->
-        <div id="registerForm" style="display: none;">
-            <div class="form-group">
-                <label class="form-label">Nombre de usuario</label>
-                <input class="form-input" id="registerUsername" type="text" placeholder="tu_nombre" />
-            </div>
-            <div class="form-group">
-                <label class="form-label">Email</label>
-                <input class="form-input" id="registerEmail" type="email" placeholder="tu@email.com" />
-            </div>
-            <div class="form-group">
-                <label class="form-label">Contraseña (mín. 6 caracteres)</label>
-                <input class="form-input" id="registerPassword" type="password" placeholder="••••••" />
-            </div>
-            <div class="form-error" id="registerError"></div>
-            <div class="modal-actions">
-                <button class="btn" onclick="closeModal('authModal')">Cancelar</button>
-                <button class="btn btn-primary" onclick="handleRegister()">Crear Cuenta</button>
-            </div>
-            <div class="auth-toggle">
-                ¿Ya tienes cuenta? <a onclick="toggleAuthMode('login')">Inicia sesión</a>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- Auth modal removed — open demo mode -->
 
 <!-- NEW MARKET MODAL -->
 <div class="modal-overlay" id="newMarketModal">
@@ -1585,8 +1536,7 @@
     // Apply saved preference immediately — runs before first render
     applyTheme(localStorage.getItem('eventox_theme') === 'light');
 
-    // ─── Auth State ──────────────────────────────────────────
-    let authToken = localStorage.getItem('eventox_token');
+    // ─── App State ────────────────────────────────────────────
     let currentUser = null;
     let allEvents = [];
     let selectedEventId = null;
@@ -1599,203 +1549,45 @@
         return currentFilter === 'all' ? allEvents : allEvents.filter(e => e.category === currentFilter);
     }
 
-    // Helper: get auth headers for API calls
     function authHeaders() {
-        const headers = { 'Content-Type': 'application/json' };
-        if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
-        return headers;
+        return { 'Content-Type': 'application/json' };
     }
 
-    // ─── Auth Functions ──────────────────────────────────────
+    // ─── Demo User ───────────────────────────────────────────
 
     async function checkAuth() {
-        if (!authToken) {
-            renderHeader();
-            return;
-        }
         try {
-            const res = await fetch(`${API}/auth/me`, { headers: authHeaders() });
-            if (!res.ok) throw new Error('Token invalid');
+            const res = await fetch(`${API}/auth/demo`);
+            if (!res.ok) throw new Error('Demo user failed');
             currentUser = await res.json();
             renderHeader();
         } catch (err) {
-            // Token expired or invalid — clear it
-            localStorage.removeItem('eventox_token');
-            authToken = null;
-            currentUser = null;
+            console.error('Failed to load demo user:', err);
             renderHeader();
         }
     }
 
     function renderHeader() {
         const el = document.getElementById('headerRight');
-        const navTabs = document.getElementById('navTabs');
-        const newMarketBtn = document.getElementById('newMarketBtn');
-
         if (currentUser) {
             el.innerHTML = `
                 <div class="credits-display">
                     CRÉDITOS: ${COIN_SVG} <span class="credits-amount" id="userCredits">${currentUser.credits.toLocaleString()}</span>
                 </div>
-                <div class="user-display">${escHtml(currentUser.username)}</div>
                 <button class="btn btn-small" onclick="claimDailyBonus()">BONO DIARIO</button>
-                <button class="btn btn-small btn-ghost" onclick="logout()">SALIR</button>
             `;
-            navTabs.style.display = 'flex';
-            // Show "new market" button only for admins
-            if (currentUser.is_admin) {
-                newMarketBtn.style.display = 'inline-block';
-                document.getElementById('adminTab').style.display = 'inline-block';
-            }
-
-        } else {
-            el.innerHTML = `
-                <button class="btn btn-small" onclick="openAuthModal('login')">ENTRAR</button>
-                <button class="btn btn-primary btn-small" onclick="openAuthModal('register')">REGISTRARSE</button>
-            `;
-            navTabs.style.display = 'none';
-            newMarketBtn.style.display = 'none';
         }
-    }
-
-    function openAuthModal(mode) {
-        toggleAuthMode(mode);
-        document.getElementById('authModal').classList.add('active');
-    }
-
-    function toggleAuthMode(mode) {
-        const loginForm = document.getElementById('loginForm');
-        const registerForm = document.getElementById('registerForm');
-        const title = document.getElementById('authModalTitle');
-
-        if (mode === 'register') {
-            loginForm.style.display = 'none';
-            registerForm.style.display = 'block';
-            title.textContent = 'Crear Cuenta';
-        } else {
-            loginForm.style.display = 'block';
-            registerForm.style.display = 'none';
-            title.textContent = 'Iniciar Sesión';
-        }
-        // Clear errors
-        document.getElementById('loginError').classList.remove('show');
-        document.getElementById('registerError').classList.remove('show');
-    }
-
-    async function handleLogin() {
-        const email = document.getElementById('loginEmail').value.trim();
-        const password = document.getElementById('loginPassword').value;
-        const errorEl = document.getElementById('loginError');
-
-        if (!email || !password) {
-            errorEl.textContent = 'Email y contraseña son requeridos.';
-            errorEl.classList.add('show');
-            return;
-        }
-
-        try {
-            const res = await fetch(`${API}/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
-            });
-            const data = await res.json();
-
-            if (!res.ok) {
-                errorEl.textContent = data.error || 'Error al iniciar sesión.';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            // Success — store token and user
-            authToken = data.token;
-            currentUser = data.user;
-            localStorage.setItem('eventox_token', authToken);
-            closeModal('authModal');
-            renderHeader();
-            showToast(`¡Bienvenido, ${currentUser.username}!`);
-
-            // Clear form
-            document.getElementById('loginEmail').value = '';
-            document.getElementById('loginPassword').value = '';
-        } catch (err) {
-            errorEl.textContent = 'Error de conexión.';
-            errorEl.classList.add('show');
-        }
-    }
-
-    async function handleRegister() {
-        const username = document.getElementById('registerUsername').value.trim();
-        const email = document.getElementById('registerEmail').value.trim();
-        const password = document.getElementById('registerPassword').value;
-        const errorEl = document.getElementById('registerError');
-
-        if (!username || !email || !password) {
-            errorEl.textContent = 'Todos los campos son requeridos.';
-            errorEl.classList.add('show');
-            return;
-        }
-
-        if (password.length < 6) {
-            errorEl.textContent = 'La contraseña debe tener al menos 6 caracteres.';
-            errorEl.classList.add('show');
-            return;
-        }
-
-        try {
-            const res = await fetch(`${API}/auth/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, email, password })
-            });
-            const data = await res.json();
-
-            if (!res.ok) {
-                errorEl.textContent = data.error || 'Error al registrar.';
-                errorEl.classList.add('show');
-                return;
-            }
-
-            // Success — store token and user
-            authToken = data.token;
-            currentUser = data.user;
-            localStorage.setItem('eventox_token', authToken);
-            closeModal('authModal');
-            renderHeader();
-            showToast(`¡Cuenta creada! Tienes ${currentUser.credits} créditos.`);
-
-            // Clear form
-            document.getElementById('registerUsername').value = '';
-            document.getElementById('registerEmail').value = '';
-            document.getElementById('registerPassword').value = '';
-        } catch (err) {
-            errorEl.textContent = 'Error de conexión.';
-            errorEl.classList.add('show');
-        }
-    }
-
-    function logout() {
-        localStorage.removeItem('eventox_token');
-        authToken = null;
-        currentUser = null;
-        renderHeader();
-        showPage('markets');
-        showToast('Sesión cerrada.');
     }
 
     // ─── Page Navigation ─────────────────────────────────────
 
     function showPage(page, tabBtn) {
-        // Hide all pages
         document.querySelectorAll('.page-section').forEach(p => p.classList.remove('active'));
-        // Show selected
         document.getElementById(`page-${page}`).classList.add('active');
-        // Update tabs
         if (tabBtn) {
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
             tabBtn.classList.add('active');
         } else {
-            // Find matching tab
             const pageKeywords = {
                 markets: 'mercados', positions: 'posiciones',
                 upcoming: 'próximos', leaderboard: 'ranking', admin: 'admin'
@@ -1805,11 +1597,10 @@
                 t.classList.toggle('active', t.textContent.toLowerCase().includes(kw));
             });
         }
-        // Load data for the page
         if (page === 'upcoming') loadUpcomingMarkets();
-        if (page === 'positions' && currentUser) loadPositions();
+        if (page === 'positions') loadPositions();
         if (page === 'leaderboard') loadLeaderboard();
-        if (page === 'admin' && currentUser?.is_admin) loadAdminMarkets();
+        if (page === 'admin') loadAdminMarkets();
     }
 
     // ─── Markets ─────────────────────────────────────────────
@@ -1821,11 +1612,8 @@
             renderMarkets(allEvents);
             updateStats();
             updateTicker(allEvents);
-            // Keep admin badge count fresh without loading the full admin panel
-            if (currentUser?.is_admin) {
-                const urgentCount = allEvents.filter(e => e.status === 'closed' || e.status === 'overdue').length;
-                updateAdminBadge(urgentCount);
-            }
+            const urgentCount = allEvents.filter(e => e.status === 'closed' || e.status === 'overdue').length;
+            updateAdminBadge(urgentCount);
         } catch (err) {
             document.getElementById('marketsContainer').innerHTML = `
                 <div class="empty-state">
@@ -2122,12 +1910,10 @@
     }
 
     function notifyShowcase() {
-        if (!currentUser) { openAuthModal('login'); return; }
         showToast('Te avisaremos cuando abra este mercado.');
     }
 
     async function watchMarket(id) {
-        if (!currentUser) { openAuthModal('login'); return; }
         if (watchedMarkets.has(id)) return;
         try {
             const res = await fetch(`${API}/events/${id}/notify`, {
@@ -2148,11 +1934,6 @@
     // ─── Create Market (Admin) ───────────────────────────────
 
     function openNewMarketModal() {
-        if (!currentUser || !currentUser.is_admin) {
-            showToast('Solo administradores pueden crear mercados.', true);
-            return;
-        }
-        // Reset modal state
         document.getElementById('eventStatus').value = 'open';
         toggleOpensAt();
         document.getElementById('newMarketModal').classList.add('active');
@@ -2194,7 +1975,6 @@
                 formData.append('image', fileInput.files[0]);
                 const uploadRes = await fetch(`${API}/admin/upload-image`, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${authToken}` },
                     body: formData
                 });
                 const uploadText = await uploadRes.text();
@@ -2245,16 +2025,6 @@
     // ─── Bet Modal ───────────────────────────────────────────
 
     function openBetModal(eventId, position) {
-        if (!currentUser) {
-            fetch(`${API}/analytics/intent`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ event_id: eventId, action: `click_${position}` })
-            }).catch(() => {});
-            openAuthModal('register');
-            return;
-        }
-
         const event = allEvents.find(e => e.id === eventId);
         if (!event) return;
 
@@ -2295,12 +2065,12 @@
 
             closeModal('betModal');
 
-            const entryPrice = selectedPosition === 'yes' ? data.entry_price : data.entry_price;
+            const entryPrice = data.entry_price;
             showToast(`${selectedPosition.toUpperCase()} comprado a ${entryPrice}¢ por ${amount} créditos`);
 
-            // Refresh credits and market prices
             currentUser.credits -= amount;
-            document.getElementById('userCredits').textContent = currentUser.credits.toLocaleString();
+            const creditsEl = document.getElementById('userCredits');
+            if (creditsEl) creditsEl.textContent = currentUser.credits.toLocaleString();
 
             // Update local event prices so cards reflect the new price immediately
             const ev = allEvents.find(e => e.id === selectedEventId);
@@ -2594,7 +2364,8 @@
 
             closeModal('sellModal');
             currentUser.credits = data.new_credits;
-            document.getElementById('userCredits').textContent = currentUser.credits.toLocaleString();
+            const creditsEl = document.getElementById('userCredits');
+            if (creditsEl) creditsEl.textContent = currentUser.credits.toLocaleString();
             const pnl = data.pnl;
             showToast(`Vendido. PnL: ${pnl >= 0 ? '+' : ''}${pnl} créditos`);
             loadPositions();
@@ -2686,13 +2457,6 @@
         });
     });
 
-    // Enter key support for auth forms
-    document.getElementById('loginPassword').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') handleLogin();
-    });
-    document.getElementById('registerPassword').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') handleRegister();
-    });
 
     // ─── Toast ───────────────────────────────────────────────
 
@@ -2824,7 +2588,6 @@
         if (!editImageEventId) return;
         const fileInput = document.getElementById('editImageFile');
         const urlInput = document.getElementById('editImageUrl').value.trim();
-        const token = localStorage.getItem('eventox_token');
 
         try {
             let res;
@@ -2833,16 +2596,12 @@
                 formData.append('image', fileInput.files[0]);
                 res = await fetch(`${API}/events/${editImageEventId}/image`, {
                     method: 'PATCH',
-                    headers: { 'Authorization': `Bearer ${token}` },
                     body: formData
                 });
             } else if (urlInput) {
                 res = await fetch(`${API}/events/${editImageEventId}/image`, {
                     method: 'PATCH',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ image_url: urlInput })
                 });
             } else {
@@ -3222,9 +2981,8 @@
     setInterval(loadHotMarkets, 30000);
     setInterval(loadTopTraders, 30000);
 
-    // Refresh positions live prices every 30s when the tab is active
     setInterval(() => {
-        if (document.getElementById('page-positions').classList.contains('active') && currentUser) {
+        if (document.getElementById('page-positions').classList.contains('active')) {
             loadPositions();
         }
     }, 30000);
