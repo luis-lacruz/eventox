@@ -2068,9 +2068,11 @@
             const entryPrice = data.entry_price;
             showToast(`${selectedPosition.toUpperCase()} comprado a ${entryPrice}¢ por ${amount} créditos`);
 
-            currentUser.credits -= amount;
-            const creditsEl = document.getElementById('userCredits');
-            if (creditsEl) creditsEl.textContent = currentUser.credits.toLocaleString();
+            if (currentUser) {
+                currentUser.credits -= amount;
+                const creditsEl = document.getElementById('userCredits');
+                if (creditsEl) creditsEl.textContent = currentUser.credits.toLocaleString();
+            }
 
             // Update local event prices so cards reflect the new price immediately
             const ev = allEvents.find(e => e.id === selectedEventId);

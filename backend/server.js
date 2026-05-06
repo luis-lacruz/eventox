@@ -63,20 +63,10 @@ app.use(cors({
   }
 }));
 
-// Security headers — disables powered-by, sets XSS/frame/MIME protections.
-// CSP is relaxed to allow the CDN scripts (Chart.js, Google Fonts) the app needs.
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
-      styleSrc:  ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc:   ["'self'", "https://fonts.gstatic.com"],
-      imgSrc:    ["'self'", "data:", "https://res.cloudinary.com", "https:"],
-      connectSrc:["'self'"],
-    }
-  }
-}));
+// Security headers — clickjacking, MIME-sniffing, HSTS, referrer policy.
+// CSP is disabled: the app uses inline <script> blocks and onclick attributes
+// throughout index.html; a strict CSP requires a nonce-based rewrite.
+app.use(helmet({ contentSecurityPolicy: false }));
 
 // ─── Rate Limiters ───────────────────────────────────────────
 
